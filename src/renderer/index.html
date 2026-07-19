@@ -1,0 +1,25 @@
+<!--
+  Password Vault Browser — Main Window Shell
+  Minimal HTML loading the renderer bundle
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: https:;
+    connect-src 'self' http://localhost:*;
+    font-src 'self' data:;
+  " />
+  <title>Password Vault Browser</title>
+  <link rel="stylesheet" href="styles/global.css" />
+</head>
+<body>
+  <div id="app-root"></div>
+  <script src="renderer.js"></script>
+</body>
+</html>
