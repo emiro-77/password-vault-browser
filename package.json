@@ -9,7 +9,7 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build:preload": "tsc -p tsconfig.preload.json",
     "build:renderer": "tsc -p tsconfig.renderer.json",
-    "copy-assets": "cp -r src/renderer/index.html dist/renderer/ && mkdir -p dist/renderer/styles && cp -r src/renderer/styles/global.css dist/renderer/styles/",
+    "copy-assets": "node -e \"const fs=require('fs'),p=require('path');fs.mkdirSync(p.join('dist','renderer','styles'),{recursive:true});fs.copyFileSync(p.join('src','renderer','index.html'),p.join('dist','renderer','index.html'));fs.copyFileSync(p.join('src','renderer','styles','global.css'),p.join('dist','renderer','styles','global.css'));\"",
     "start": "electron .",
     "dev": "npm run build && electron .",
     "clean": "rm -rf dist/",
@@ -31,15 +31,11 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         },
         {
           "target": "portable",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
       "icon": null
@@ -57,7 +53,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
-    "uuid": "^14.0.1"
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
@@ -65,8 +61,7 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@types/uuid": "^10.0.0",
-    "copyfiles": "^2.4.1",
-    "electron": "^43.1.1",
+    "electron": "^33.2.0",
     "electron-builder": "^26.15.3",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
