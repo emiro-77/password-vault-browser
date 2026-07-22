@@ -8,8 +8,8 @@ import BookmarksBar from './components/BookmarksBar';
 import Sidebar from './components/Sidebar';
 import TabStrip from './components/TabStrip';
 import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus } from '../shared/types';
-import { SIDEBAR_WIDTH } from '../shared/constants';
 import { WebviewTag } from './types.d';
+import { getApi, isMockApi } from './api';
 
 /**
  * Status badge state for each login entry on the current domain.
@@ -51,7 +51,8 @@ export default function App() {
   const contentRef = useRef<HTMLDivElement>(null);
   const webviewRef = useRef<WebviewTag | null>(null);
 
-  const api = window.pvbAPI;
+  const api = getApi();
+  const mockMode = isMockApi();
 
   // ---- Data loading ----
 
@@ -394,6 +395,12 @@ export default function App() {
 
   return (
     <div className="app-layout">
+      {mockMode && (
+        <div className="placeholder-banner" role="status">
+          Placeholder mode — browser engine not connected. Showing mock data so the shell UI is fully visible.
+        </div>
+      )}
+
       {/* Chrome: Address bar */}
       <div className="chrome">
         <AddressBar
