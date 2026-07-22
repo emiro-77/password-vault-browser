@@ -75,6 +75,7 @@ const api = {
       IPC_CHANNELS.EVENT_TAB_URL_CHANGED,
       IPC_CHANNELS.EVENT_PAGE_TITLE_CHANGED,
       IPC_CHANNELS.EVENT_NAVIGATION_STATE_CHANGED,
+      IPC_CHANNELS.EVENT_STATUS_CHANGED,
     ];
 
     if (validChannels.includes(channel as any)) {

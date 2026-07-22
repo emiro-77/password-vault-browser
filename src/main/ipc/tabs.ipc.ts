@@ -10,8 +10,23 @@ import { statusManager } from '../services/status-manager';
 import { loginEntryManager } from '../services/login-entry-manager';
 import { normalizeUrlOrSearch } from '../services/domain-utils';
 import { extractHostname, extractDomain } from '../services/domain-utils';
+import { canGoBack, canGoForward } from '../services/webcontents-utils';
 import { AUTOFILL_PRELOAD } from '../../shared/constants';
 import * as path from 'path';
+
+/** Broadcast a message to every open app window (the renderer UI). */
+function broadcast(channel: string, data: any): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, data);
+    }
+  }
+}
+
+/** Push refreshed per-site status for a domain to the renderer. */
+export function emitStatusChanged(domain: string | null): void {
+  broadcast(IPC_CHANNELS.EVENT_STATUS_CHANGED, { domain });
+}
 
 export function registerTabsIpc(): void {
   // Create a new guest tab
@@ -77,8 +92,9 @@ export function registerTabsIpc(): void {
             passwordSecretRef: secretRef,
           });
 
-          // Mark as logged in
+          // Mark as logged in and notify the renderer to refresh the sidebar
           statusManager.markLoggedIn(loginEntryId, domain, tabInfo.id);
+          emitStatusChanged(domain);
         }
       });
 
@@ -184,59 +200,57 @@ function createViewForTab(tabId: string, partitionId: string): BrowserView {
 function setupViewEvents(tabId: string, view: BrowserView): void {
   const wc = view.webContents;
 
-  const sendToRenderer = (channel: string, data: any) => {
-    const wins = BrowserWindow.getAllWindows();
-    for (const win of wins) {
-      if (!win.isDestroyed()) {
-        win.webContents.send(channel, data);
-      }
-    }
-  };
-
-  // URL changed
-  wc.on('did-navigate', (_event, url) => {
-    sendToRenderer(IPC_CHANNELS.EVENT_TAB_URL_CHANGED, {
+  const emitUrl = (url: string) => {
+    broadcast(IPC_CHANNELS.EVENT_TAB_URL_CHANGED, {
       tabId,
       url,
       domain: extractDomain(url),
-      canGoBack: wc.canGoBack(),
-      canGoForward: wc.canGoForward(),
+      canGoBack: canGoBack(wc),
+      canGoForward: canGoForward(wc),
     });
+  };
+
+  const emitNavState = (isLoading: boolean) => {
+    broadcast(IPC_CHANNELS.EVENT_NAVIGATION_STATE_CHANGED, {
+      tabId,
+      isLoading,
+      canGoBack: canGoBack(wc),
+      canGoForward: canGoForward(wc),
+    });
+  };
+
+  // URL changed (full navigation + in-page/SPA navigation)
+  wc.on('did-navigate', (_event, url) => {
+    emitUrl(url);
+    persistTabUrl(tabId, url);
   });
 
   wc.on('did-navigate-in-page', (_event, url) => {
-    sendToRenderer(IPC_CHANNELS.EVENT_TAB_URL_CHANGED, {
-      tabId,
-      url,
-      domain: extractDomain(url),
-      canGoBack: wc.canGoBack(),
-      canGoForward: wc.canGoForward(),
-    });
+    emitUrl(url);
+    persistTabUrl(tabId, url);
   });
 
   // Page title changed
   wc.on('page-title-updated', (_event, title) => {
-    sendToRenderer(IPC_CHANNELS.EVENT_PAGE_TITLE_CHANGED, { tabId, title });
+    broadcast(IPC_CHANNELS.EVENT_PAGE_TITLE_CHANGED, { tabId, title });
   });
 
-  // Loading state
-  wc.on('did-start-loading', () => {
-    sendToRenderer(IPC_CHANNELS.EVENT_NAVIGATION_STATE_CHANGED, { tabId, isLoading: true });
-  });
+  // Loading state — include nav availability so back/forward buttons update.
+  wc.on('did-start-loading', () => emitNavState(true));
+  wc.on('did-stop-loading', () => emitNavState(false));
 
-  wc.on('did-stop-loading', () => {
-    sendToRenderer(IPC_CHANNELS.EVENT_NAVIGATION_STATE_CHANGED, { tabId, isLoading: false });
-  });
+  // Emit an authoritative nav state once the DOM is ready, so buttons reflect
+  // history even for the very first load.
+  wc.on('dom-ready', () => emitNavState(wc.isLoading()));
+}
 
-  // Update DB when navigated
-  wc.on('did-navigate', (_event, url) => {
-    try {
-      const { getDatabase } = require('../db');
-      const db = getDatabase();
-      db.prepare('UPDATE tabs SET current_url = ?, domain = ? WHERE id = ?')
-        .run(url, extractDomain(url), tabId);
-    } catch {
-      // DB may not be ready
-    }
-  });
+function persistTabUrl(tabId: string, url: string): void {
+  try {
+    const { getDatabase } = require('../db');
+    const db = getDatabase();
+    db.prepare('UPDATE tabs SET current_url = ?, domain = ? WHERE id = ?')
+      .run(url, extractDomain(url), tabId);
+  } catch {
+    // DB may not be ready
+  }
 }

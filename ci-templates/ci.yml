@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Type-check (main + preload + renderer)
+        run: |
+          npx tsc -p tsconfig.main.json --noEmit
+          npx tsc -p tsconfig.preload.json --noEmit
+          npm run typecheck:renderer
+
+      - name: Build
+        run: npm run build
+
+      - name: Run unit tests
+        run: |
+          for f in tests/*.test.ts; do
+            echo "== $f =="
+            npx tsx "$f"
+          done

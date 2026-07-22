@@ -13,9 +13,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { TabInfo, TabType } from '../../shared/types';
 import { getDatabase } from '../db';
 import { extractDomain } from './domain-utils';
+import { canGoBack, canGoForward, goBack, goForward, computeViewBounds } from './webcontents-utils';
+
+/** Default chrome height (address bar + bookmarks bar + tab strip) until the
+ *  renderer reports the exact value via IPC. Must match the renderer's
+ *  CHROME_HEIGHT constant. */
+const DEFAULT_CHROME_HEIGHT = 120;
 import {
   PARTITION_PREFIX_GUEST,
   PARTITION_PREFIX_LOGIN,
+  SIDEBAR_WIDTH,
 } from '../../shared/constants';
 
 interface TabEntry {
@@ -27,6 +34,8 @@ export class TabManager {
   private tabs: Map<string, TabEntry> = new Map();
   private activeTabId: string | null = null;
   private window: BrowserWindow | null = null;
+  /** Last chrome height reported by the renderer; used to position views. */
+  private chromeHeight: number = DEFAULT_CHROME_HEIGHT;
 
   /**
    * Attach the tab manager to a browser window.
@@ -180,45 +189,44 @@ export class TabManager {
 
     // Add the selected view
     if (entry.view) {
-      // Calculate content area bounds (accounting for UI chrome)
-      const bounds = this.window.getBounds();
-      // NOTE: Renderer will communicate exact chrome height; we use a default here
-      // The render sends the exact chrome height via IPC
-      const chromeHeight = entry.info.type === 'login_entry' ? 120 : 120; // address bar + bookmarks bar
-      entry.view.setBounds({ x: 0, y: 0, width: bounds.width, height: bounds.height });
-
-      // Use setBounds with proper content area
+      // Use the sidebar + chrome-aware bounds so the page never overlaps the UI.
       this.window.setBrowserView(entry.view);
-
-      // Set bounds again after adding (Electron requires this order sometimes)
-      entry.view.setBounds({
-        x: 0,
-        y: chromeHeight,
-        width: bounds.width,
-        height: bounds.height - chromeHeight,
-      });
+      this.applyBounds(entry.view);
     }
 
     console.log(`[TabManager] Switched to tab: ${tabId}`);
   }
 
   /**
+   * Compute the content-area bounds from the window size, the last reported
+   * chrome height (top bar + bookmarks + tab strip) and the sidebar width.
+   * Uses the window content bounds (not frame bounds) so the page sits exactly
+   * in the client area.
+   */
+  private applyBounds(view: BrowserView): void {
+    if (!this.window) return;
+    // getContentBounds excludes the OS window frame/titlebar.
+    const bounds = this.window.getContentBounds();
+    view.setBounds(computeViewBounds(bounds.width, bounds.height, SIDEBAR_WIDTH, this.chromeHeight));
+    // Auto-resize so the view follows window resizes between explicit updates.
+    view.setAutoResize({ width: true, height: true });
+  }
+
+  /**
    * Update the bounds of the active tab's BrowserView.
    * Called when the window is resized or chrome height changes.
+   * The chrome height is remembered so future tab switches reuse it.
    */
   updateActiveViewBounds(chromeHeight: number): void {
+    if (chromeHeight && chromeHeight > 0) {
+      this.chromeHeight = chromeHeight;
+    }
     if (!this.activeTabId || !this.window) return;
 
     const entry = this.tabs.get(this.activeTabId);
     if (!entry?.view) return;
 
-    const bounds = this.window.getBounds();
-    entry.view.setBounds({
-      x: 0,
-      y: chromeHeight,
-      width: bounds.width,
-      height: bounds.height - chromeHeight,
-    });
+    this.applyBounds(entry.view);
   }
 
   /**
@@ -322,8 +330,8 @@ export class TabManager {
   goBack(): void {
     if (!this.activeTabId) return;
     const view = this.tabs.get(this.activeTabId)?.view;
-    if (view?.webContents?.canGoBack()) {
-      view.webContents.goBack();
+    if (view?.webContents && canGoBack(view.webContents)) {
+      goBack(view.webContents);
     }
   }
 
@@ -333,8 +341,8 @@ export class TabManager {
   goForward(): void {
     if (!this.activeTabId) return;
     const view = this.tabs.get(this.activeTabId)?.view;
-    if (view?.webContents?.canGoForward()) {
-      view.webContents.goForward();
+    if (view?.webContents && canGoForward(view.webContents)) {
+      goForward(view.webContents);
     }
   }
 

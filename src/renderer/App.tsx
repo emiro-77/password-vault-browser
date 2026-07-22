@@ -341,9 +341,18 @@ export default function App() {
     const unsub3 = api.on('event:nav-state-changed', (data: any) => {
       if (data.tabId === activeTabId) {
         setNavigationState(prev => ({
-          ...prev,
-          isLoading: data.isLoading,
+          isLoading: data.isLoading ?? prev.isLoading,
+          canGoBack: data.canGoBack ?? prev.canGoBack,
+          canGoForward: data.canGoForward ?? prev.canGoForward,
         }));
+      }
+    });
+
+    // Per-site login status changed in the main process (e.g. after autofill).
+    // Refresh the sidebar if it concerns the current domain (or is global).
+    const unsub4 = api.on('event:status-changed', (data: any) => {
+      if (!data?.domain || data.domain === currentDomain) {
+        loadDomainStatuses(currentDomain);
       }
     });
 
@@ -351,8 +360,9 @@ export default function App() {
       unsub1();
       unsub2();
       unsub3();
+      unsub4();
     };
-  }, [api, activeTabId]);
+  }, [api, activeTabId, currentDomain, loadDomainStatuses]);
 
   // ---- Window resize -> update BrowserView bounds ----
 

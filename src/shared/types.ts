@@ -138,6 +138,7 @@ export const IPC_CHANNELS = {
   EVENT_TAB_URL_CHANGED:  'event:tab-url-changed',
   EVENT_PAGE_TITLE_CHANGED: 'event:page-title-changed',
   EVENT_NAVIGATION_STATE_CHANGED: 'event:nav-state-changed',
+  EVENT_STATUS_CHANGED:   'event:status-changed',
 } as const;
 
 // ---- IPC Request / Response Types ----

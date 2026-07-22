@@ -14,6 +14,7 @@ import { autofillEngine } from '../services/autofill-engine';
 import { loginEntryManager } from '../services/login-entry-manager';
 import { statusManager } from '../services/status-manager';
 import { hostnameMatches, extractDomain } from '../services/domain-utils';
+import { emitStatusChanged } from './tabs.ipc';
 
 export function registerAutofillIpc(): void {
   ipcMain.handle(IPC_CHANNELS.AUTOFILL, async (_event, payload: {
@@ -53,10 +54,11 @@ export function registerAutofillIpc(): void {
         return { success: false, error: 'Autofill failed — hostname mismatch or script error' };
       }
 
-      // Mark as logged in for this domain
+      // Mark as logged in for this domain and refresh the sidebar
       const domain = extractDomain(url);
       if (domain) {
         statusManager.markLoggedIn(loginEntryId, domain, tabId);
+        emitStatusChanged(domain);
       }
 
       return { success: true, data: { domain } };
