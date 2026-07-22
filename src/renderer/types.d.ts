@@ -6,8 +6,8 @@ import { IpcResponse, LoginEntry, Bookmark, SiteLoginStatus, TabInfo } from '../
 
 export interface PvbAPI {
   credentials: {
-    list: () => Promise<IpcResponse<LoginEntry[]>>;
-    create: (data: { label: string; usernameOrEmail: string; password: string }) => Promise<IpcResponse<LoginEntry>>;
+    list: (domain?: string) => Promise<IpcResponse<LoginEntry[]>>;
+    create: (data: { label: string; usernameOrEmail: string; password: string; domain?: string }) => Promise<IpcResponse<LoginEntry>>;
     update: (data: { id: string; label?: string; usernameOrEmail?: string; password?: string }) => Promise<IpcResponse<LoginEntry>>;
     delete: (id: string) => Promise<IpcResponse>;
   };
@@ -34,6 +34,7 @@ export interface PvbAPI {
     goForward: () => Promise<IpcResponse>;
     refresh: () => Promise<IpcResponse>;
     list: () => Promise<IpcResponse<TabInfo[]>>;
+    setOverlay: (visible: boolean) => Promise<IpcResponse>;
   };
 
   autofill: {

@@ -47,9 +47,41 @@ export function initDatabase(): Database.Database {
 
   console.log('[DB] Running schema migrations...');
   db.exec(SCHEMA_SQL);
+
+  // Migrate older databases that predate the per-site `domain` column.
+  migrateAddDomainColumn(db);
+
   console.log('[DB] Schema initialized successfully.');
 
   return db;
+}
+
+/**
+ * Ensure login_entries has a `domain` column (added when accounts became
+ * per-site). Safe to run repeatedly. On very old DBs the CREATE TABLE above is
+ * a no-op (table exists), so we ALTER in the new column here.
+ */
+function migrateAddDomainColumn(database: Database.Database): void {
+  try {
+    const cols = database.prepare(`PRAGMA table_info(login_entries)`).all() as any[];
+    const hasDomain = cols.some(c => c.name === 'domain');
+    if (!hasDomain) {
+      console.log('[DB] Migrating: adding login_entries.domain column');
+      database.exec(`ALTER TABLE login_entries ADD COLUMN domain TEXT NOT NULL DEFAULT ''`);
+    }
+    // (Re)create the uniqueness index — ignore errors if duplicates already
+    // exist in a legacy DB (index creation would then fail; we log and skip).
+    try {
+      database.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_login_entries_domain_user
+          ON login_entries(domain, username_or_email)
+      `);
+    } catch (e) {
+      console.warn('[DB] Could not create unique index (legacy duplicates?):', e);
+    }
+  } catch (err) {
+    console.error('[DB] domain-column migration failed:', err);
+  }
 }
 
 /**

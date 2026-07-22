@@ -1,8 +1,8 @@
 # Password Vault Browser
 
 A privacy-focused, multi-session desktop browser (Electron) with isolated tabs
-and **global** credential management. Login entries are global app records;
-per-site login *status* is tracked separately.
+and **per-site** credential management. Each login entry belongs to a specific
+site (domain), and per-site login *status* is tracked for each site.
 
 ## Architecture
 
@@ -48,10 +48,26 @@ entries and bookmarks. A yellow banner indicates placeholder mode.
 
 ## Product model
 
-- **Login entries** are global records (id, label, username/email). Passwords
-  are stored main-process-side only and never sent to the renderer.
+- **Login entries are per-site** (id, label, username/email, **domain**).
+  Each account is saved for a specific website; the sidebar for a given site
+  only shows that site's accounts (plus any legacy unscoped accounts whose
+  `domain` is `''`). Passwords are stored main-process-side only and never sent
+  to the renderer.
+- **Duplicate prevention** — you cannot save two accounts with the same
+  username/email on the same domain (enforced in `login-entry-manager.create`
+  and by a unique DB index on `(domain, username_or_email)`). The modal shows
+  the rejection message.
 - **Per-site login status** is a separate record keyed by `(loginEntryId, domain)`.
-- Credentials are **not** modeled as per-site records.
+
+### Modal / BrowserView layering
+
+A loaded page is rendered by a native Electron `BrowserView`, which sits **above**
+all shell HTML regardless of CSS `z-index`. To make the "Add Login Entry" modal
+visible and interactive on top of a page, the renderer calls
+`pvbAPI.tabs.setOverlay(true)` when the modal opens (main process detaches the
+active `BrowserView` via `removeBrowserView`) and `setOverlay(false)` on
+close/save (reattaches it). This is what fixes the "can't type / click in the
+modal" and "no modal appears over a web page" issues.
 
 ## Address bar behavior
 
@@ -149,6 +165,10 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
 - ✅ Per-site login status refreshed end-to-end after autofill (v0.3.0)
 - ✅ Sandbox-safe preload so `window.pvbAPI` loads and real browsing works —
   fixes the "placeholder mode / pages don't load" issue (v0.3.1)
+- ✅ Modal now renders on top of loaded pages (BrowserView detach/reattach via
+  `tabs.setOverlay`) so its inputs and Cancel/Add buttons work (v0.3.2, fixes #1/#2)
+- ✅ Per-site accounts: sidebar and "add account" are scoped to the current site;
+  duplicate username/email on the same site is rejected (v0.3.2, fixes #1/#3)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

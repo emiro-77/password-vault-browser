@@ -24,16 +24,37 @@ export class LoginEntryManager {
   listAll(): LoginEntry[] {
     const db = getDatabase();
     const rows = db.prepare(
-      'SELECT id, label, username_or_email, created_at, updated_at FROM login_entries ORDER BY updated_at DESC'
+      'SELECT id, label, username_or_email, domain, created_at, updated_at FROM login_entries ORDER BY updated_at DESC'
     ).all() as any[];
 
-    return rows.map(r => ({
+    return rows.map(this.rowToEntry);
+  }
+
+  /**
+   * List accounts for a specific site (domain). Unscoped ('' domain) entries
+   * are included so legacy/global accounts still appear everywhere.
+   */
+  listForDomain(domain: string): LoginEntry[] {
+    const db = getDatabase();
+    const rows = db.prepare(
+      `SELECT id, label, username_or_email, domain, created_at, updated_at
+       FROM login_entries
+       WHERE domain = ? OR domain = ''
+       ORDER BY updated_at DESC`
+    ).all(domain) as any[];
+
+    return rows.map(this.rowToEntry);
+  }
+
+  private rowToEntry(r: any): LoginEntry {
+    return {
       id: r.id,
       label: r.label,
       usernameOrEmail: r.username_or_email,
+      domain: r.domain ?? '',
       createdAt: r.created_at,
       updatedAt: r.updated_at,
-    }));
+    };
   }
 
   /**
@@ -42,18 +63,25 @@ export class LoginEntryManager {
   getById(id: string): LoginEntry | null {
     const db = getDatabase();
     const row = db.prepare(
-      'SELECT id, label, username_or_email, created_at, updated_at FROM login_entries WHERE id = ?'
+      'SELECT id, label, username_or_email, domain, created_at, updated_at FROM login_entries WHERE id = ?'
     ).get(id) as any;
 
     if (!row) return null;
+    return this.rowToEntry(row);
+  }
 
-    return {
-      id: row.id,
-      label: row.label,
-      usernameOrEmail: row.username_or_email,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
+  /**
+   * Whether an account with this username already exists for this site.
+   * Duplicate = same normalized username on the same domain.
+   */
+  existsForDomain(usernameOrEmail: string, domain: string): boolean {
+    const db = getDatabase();
+    const row = db.prepare(
+      `SELECT 1 FROM login_entries
+       WHERE domain = ? AND lower(trim(username_or_email)) = lower(trim(?))
+       LIMIT 1`
+    ).get(domain, usernameOrEmail);
+    return !!row;
   }
 
   /**
@@ -61,6 +89,15 @@ export class LoginEntryManager {
    * Password is stored in Windows Credential Manager; DB stores the reference key.
    */
   async create(request: LoginEntryCreateRequest): Promise<LoginEntry> {
+    const domain = (request.domain ?? '').trim().toLowerCase();
+    const username = request.usernameOrEmail.trim();
+
+    // Duplicate guard: same username on the same site is rejected.
+    if (this.existsForDomain(username, domain)) {
+      const where = domain ? `for "${domain}"` : '(global)';
+      throw new Error(`An account "${username}" already exists ${where}.`);
+    }
+
     const id = uuidv4();
     const secretRef = `${APP_CODE_NAME}-entry-${id}`;
     const now = new Date().toISOString();
@@ -70,17 +107,28 @@ export class LoginEntryManager {
 
     // Store metadata in SQLite
     const db = getDatabase();
-    db.prepare(`
-      INSERT INTO login_entries (id, label, username_or_email, password_secret_ref, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, request.label, request.usernameOrEmail, secretRef, now, now);
+    try {
+      db.prepare(`
+        INSERT INTO login_entries (id, label, username_or_email, domain, password_secret_ref, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, request.label, username, domain, secretRef, now, now);
+    } catch (err: any) {
+      // Roll back the stored secret if the DB write fails (e.g. unique index).
+      await deleteCredential(secretRef).catch(() => {});
+      if (String(err?.message || '').includes('UNIQUE')) {
+        const where = domain ? `for "${domain}"` : '(global)';
+        throw new Error(`An account "${username}" already exists ${where}.`);
+      }
+      throw err;
+    }
 
-    console.log(`[LoginEntryManager] Created entry: ${id} (${request.label})`);
+    console.log(`[LoginEntryManager] Created entry: ${id} (${request.label}) domain="${domain}"`);
 
     return {
       id,
       label: request.label,
-      usernameOrEmail: request.usernameOrEmail,
+      usernameOrEmail: username,
+      domain,
       createdAt: now,
       updatedAt: now,
     };
@@ -93,7 +141,7 @@ export class LoginEntryManager {
   async update(request: LoginEntryUpdateRequest): Promise<LoginEntry | null> {
     const db = getDatabase();
     const row = db.prepare(
-      'SELECT id, label, username_or_email, password_secret_ref, created_at, updated_at FROM login_entries WHERE id = ?'
+      'SELECT id, label, username_or_email, domain, password_secret_ref, created_at, updated_at FROM login_entries WHERE id = ?'
     ).get(request.id) as any;
 
     if (!row) return null;
@@ -117,6 +165,7 @@ export class LoginEntryManager {
       id: row.id,
       label,
       usernameOrEmail,
+      domain: row.domain ?? '',
       createdAt: row.created_at,
       updatedAt: now,
     };

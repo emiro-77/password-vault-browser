@@ -1,6 +1,6 @@
 {
   "name": "password-vault-browser",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Privacy-focused multi-session browser with isolated tabs and global credential management",
   "main": "dist/main/index.js",
   "type": "commonjs",

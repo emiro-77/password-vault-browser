@@ -20,6 +20,7 @@ export interface LoginEntry {
   id: string;
   label: string;
   usernameOrEmail: string;
+  domain: string;      // site this account belongs to ('' = unscoped/legacy)
   // password_secret_ref is main-process-only — never sent to renderer
   createdAt: string;   // ISO 8601
   updatedAt: string;   // ISO 8601
@@ -29,6 +30,7 @@ export interface LoginEntryCreateRequest {
   label: string;
   usernameOrEmail: string;
   password: string;    // only sent once during create/update
+  domain?: string;     // site this account belongs to
 }
 
 export interface LoginEntryUpdateRequest {
@@ -123,6 +125,9 @@ export const IPC_CHANNELS = {
   TAB_REFRESH:            'tab:refresh',
   TAB_LIST:               'tab:list',
   TAB_UPDATE_URL:         'tab:update-url',
+
+  // Overlay control — hide the web view so shell modals are interactive
+  VIEW_SET_OVERLAY:       'view:set-overlay',
 
   // Autofill
   AUTOFILL:               'autofill:execute',

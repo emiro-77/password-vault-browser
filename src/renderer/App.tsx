@@ -57,8 +57,10 @@ export default function App() {
 
   // ---- Data loading ----
 
-  const loadLoginEntries = useCallback(async () => {
-    const res = await api.credentials.list();
+  const loadLoginEntries = useCallback(async (domain?: string | null) => {
+    // Per-site accounts: when a domain is active, only that site's accounts
+    // (plus legacy unscoped ones) are listed.
+    const res = await api.credentials.list(domain || undefined);
     if (res.success && res.data) {
       setLoginEntries(res.data);
     }
@@ -114,14 +116,20 @@ export default function App() {
   }, [api, loginEntries]);
 
   const loadAllData = useCallback(async () => {
-    await Promise.all([loadLoginEntries(), loadBookmarks()]);
-  }, [loadLoginEntries, loadBookmarks]);
+    await Promise.all([loadLoginEntries(currentDomain), loadBookmarks()]);
+  }, [loadLoginEntries, loadBookmarks, currentDomain]);
 
   // ---- Initial load ----
 
   useEffect(() => {
-    loadAllData();
-  }, [loadAllData]);
+    loadBookmarks();
+  }, [loadBookmarks]);
+
+  // Per-site accounts (#3): reload the login entries whenever the active
+  // site/domain changes so the sidebar only shows accounts for this site.
+  useEffect(() => {
+    loadLoginEntries(currentDomain);
+  }, [currentDomain, loadLoginEntries]);
 
   // Reload domain statuses when login entries or current domain changes
   useEffect(() => {
@@ -383,30 +391,46 @@ export default function App() {
   // ---- Modal handlers ----
 
   const [modalData, setModalData] = useState({ label: '', usernameOrEmail: '', password: '' });
+  const [modalError, setModalError] = useState<string | null>(null);
 
   const handleOpenAddEntryModal = useCallback(() => {
     setModalData({ label: '', usernameOrEmail: '', password: '' });
+    setModalError(null);
     setShowAddEntryModal(true);
-  }, []);
+    // #1/#2: Detach the native BrowserView so the HTML modal is visible and
+    // interactive on top of any loaded web page.
+    api.tabs.setOverlay(true);
+  }, [api]);
 
   const handleCloseAddEntryModal = useCallback(() => {
     setShowAddEntryModal(false);
-  }, []);
+    setModalError(null);
+    // Reattach the BrowserView so the web page is shown again.
+    api.tabs.setOverlay(false);
+  }, [api]);
 
   const handleSaveNewEntry = useCallback(async () => {
     if (!modalData.label || !modalData.usernameOrEmail || !modalData.password) return;
+
+    setModalError(null);
 
     const res = await api.credentials.create({
       label: modalData.label,
       usernameOrEmail: modalData.usernameOrEmail,
       password: modalData.password,
+      // #3: bind the account to the current site so it's saved per-website.
+      domain: currentDomain || undefined,
     });
 
     if (res.success) {
       setShowAddEntryModal(false);
-      loadLoginEntries();
+      api.tabs.setOverlay(false);
+      loadLoginEntries(currentDomain);
+    } else {
+      // #1: surface duplicate-account (and any other) errors in the modal.
+      setModalError(res.error || 'Failed to save account.');
     }
-  }, [modalData, api, loadLoginEntries]);
+  }, [modalData, api, loadLoginEntries, currentDomain]);
 
   // ---- Render ----
 
@@ -476,6 +500,13 @@ export default function App() {
         <div className="modal-overlay" onClick={handleCloseAddEntryModal}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-title">Add Login Entry</div>
+            {currentDomain && (
+              <div className="modal-subtitle">for {currentDomain}</div>
+            )}
+
+            {modalError && (
+              <div className="modal-error" role="alert">{modalError}</div>
+            )}
 
             <div className="modal-field">
               <label className="modal-label">Label</label>

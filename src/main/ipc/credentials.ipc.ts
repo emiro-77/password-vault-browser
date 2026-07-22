@@ -8,10 +8,13 @@ import { loginEntryManager } from '../services/login-entry-manager';
 import { getCredential } from '../services/credential-store';
 
 export function registerCredentialsIpc(): void {
-  // List all login entries (no passwords)
-  ipcMain.handle(IPC_CHANNELS.CREDENTIALS_LIST, async (): Promise<IpcResponse> => {
+  // List login entries. If a domain is provided, only accounts for that site
+  // (plus unscoped/global accounts) are returned; otherwise all are returned.
+  ipcMain.handle(IPC_CHANNELS.CREDENTIALS_LIST, async (_event, domain?: string): Promise<IpcResponse> => {
     try {
-      const entries = loginEntryManager.listAll();
+      const entries = (domain && domain.trim())
+        ? loginEntryManager.listForDomain(domain.trim().toLowerCase())
+        : loginEntryManager.listAll();
       return { success: true, data: entries };
     } catch (err: any) {
       return { success: false, error: err.message };

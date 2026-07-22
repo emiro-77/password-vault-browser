@@ -5,15 +5,22 @@
 // For compile-time verification, we define them as string constants.
 
 export const SCHEMA_SQL = `
--- Global login entries (passwords stored in Windows Credential Manager)
+-- Per-site login entries (passwords stored in Windows Credential Manager).
+-- Each account belongs to a specific site (domain). A NULL/'' domain means an
+-- unscoped account (legacy / global) that shows on every site.
 CREATE TABLE IF NOT EXISTS login_entries (
   id                 TEXT PRIMARY KEY,
   label              TEXT NOT NULL,
   username_or_email  TEXT NOT NULL,
+  domain             TEXT NOT NULL DEFAULT '',
   password_secret_ref TEXT NOT NULL,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL
 );
+
+-- Prevent duplicate accounts: same username on the same site cannot be added twice.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_login_entries_domain_user
+  ON login_entries(domain, username_or_email);
 
 -- Bookmarks (flat list for MVP)
 CREATE TABLE IF NOT EXISTS bookmarks (

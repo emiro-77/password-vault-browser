@@ -36,6 +36,10 @@ export class TabManager {
   private window: BrowserWindow | null = null;
   /** Last chrome height reported by the renderer; used to position views. */
   private chromeHeight: number = DEFAULT_CHROME_HEIGHT;
+  /** When true, the active web view is detached so a shell modal/overlay in the
+   *  renderer can receive focus & clicks (a BrowserView always renders above the
+   *  shell HTML, so it must be removed, not just z-index'd). */
+  private overlayActive: boolean = false;
 
   /**
    * Attach the tab manager to a browser window.
@@ -187,8 +191,9 @@ export class TabManager {
       }
     }
 
-    // Add the selected view
-    if (entry.view) {
+    // Add the selected view — unless an overlay/modal is currently showing,
+    // in which case the view stays detached until the overlay is dismissed.
+    if (entry.view && !this.overlayActive) {
       // Use the sidebar + chrome-aware bounds so the page never overlaps the UI.
       this.window.setBrowserView(entry.view);
       this.applyBounds(entry.view);
@@ -227,6 +232,30 @@ export class TabManager {
     if (!entry?.view) return;
 
     this.applyBounds(entry.view);
+  }
+
+  /**
+   * Show or hide a shell overlay/modal. When shown, the active web view is
+   * detached from the window so the renderer's modal (plain HTML) becomes
+   * visible and interactive; when hidden, the view is reattached.
+   */
+  setOverlay(visible: boolean): void {
+    this.overlayActive = visible;
+    if (!this.window) return;
+
+    const entry = this.activeTabId ? this.tabs.get(this.activeTabId) : null;
+    if (!entry?.view) return;
+
+    if (visible) {
+      try {
+        this.window.removeBrowserView(entry.view);
+      } catch {
+        // Not attached
+      }
+    } else {
+      this.window.setBrowserView(entry.view);
+      this.applyBounds(entry.view);
+    }
   }
 
   /**

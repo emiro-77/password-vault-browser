@@ -174,6 +174,17 @@ export function registerTabsIpc(): void {
       return { success: false, error: err.message };
     }
   });
+
+  // Show/hide a shell overlay (modal). Detaches the web view so the modal in
+  // the renderer is visible and clickable above any loaded page.
+  ipcMain.handle(IPC_CHANNELS.VIEW_SET_OVERLAY, async (_event, visible: boolean): Promise<IpcResponse> => {
+    try {
+      tabManager.setOverlay(!!visible);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
 }
 
 // ---- Helper functions ----

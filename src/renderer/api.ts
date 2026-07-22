@@ -19,9 +19,9 @@ const now = () => new Date().toISOString();
 // ---- Mock/placeholder data ------------------------------------------------
 
 const MOCK_LOGIN_ENTRIES: LoginEntry[] = [
-  { id: 'mock-1', label: 'Personal Email', usernameOrEmail: 'you@example.com', createdAt: now(), updatedAt: now() },
-  { id: 'mock-2', label: 'Work Account', usernameOrEmail: 'you@company.com', createdAt: now(), updatedAt: now() },
-  { id: 'mock-3', label: 'Social Media', usernameOrEmail: '@yourhandle', createdAt: now(), updatedAt: now() },
+  { id: 'mock-1', label: 'Personal Email', usernameOrEmail: 'you@example.com', domain: '', createdAt: now(), updatedAt: now() },
+  { id: 'mock-2', label: 'Work Account', usernameOrEmail: 'you@company.com', domain: '', createdAt: now(), updatedAt: now() },
+  { id: 'mock-3', label: 'Social Media', usernameOrEmail: '@yourhandle', domain: '', createdAt: now(), updatedAt: now() },
 ];
 
 const MOCK_BOOKMARKS: Bookmark[] = [
@@ -59,11 +59,12 @@ function createMockApi(): PvbAPI & { __isMock: true } {
     __isMock: true,
 
     credentials: {
-      list: () => ok(MOCK_LOGIN_ENTRIES),
+      list: (domain) =>
+        ok(domain ? MOCK_LOGIN_ENTRIES.filter(e => e.domain === domain || e.domain === '') : MOCK_LOGIN_ENTRIES),
       create: (data) =>
-        ok({ id: `mock-${Date.now()}`, label: data.label, usernameOrEmail: data.usernameOrEmail, createdAt: now(), updatedAt: now() }),
+        ok({ id: `mock-${Date.now()}`, label: data.label, usernameOrEmail: data.usernameOrEmail, domain: data.domain || '', createdAt: now(), updatedAt: now() }),
       update: (data) =>
-        ok({ id: data.id, label: data.label || '', usernameOrEmail: data.usernameOrEmail || '', createdAt: now(), updatedAt: now() }),
+        ok({ id: data.id, label: data.label || '', usernameOrEmail: data.usernameOrEmail || '', domain: '', createdAt: now(), updatedAt: now() }),
       delete: () => ok(undefined),
     },
 
@@ -100,6 +101,7 @@ function createMockApi(): PvbAPI & { __isMock: true } {
       goForward: () => ok(undefined),
       refresh: () => ok(undefined),
       list: () => ok(tabs),
+      setOverlay: () => ok(undefined),
     },
 
     autofill: {

@@ -46,6 +46,9 @@ const IPC_CHANNELS = {
   TAB_LIST:               'tab:list',
   TAB_UPDATE_URL:         'tab:update-url',
 
+  // Overlay control
+  VIEW_SET_OVERLAY:       'view:set-overlay',
+
   // Autofill
   AUTOFILL:               'autofill:execute',
 
@@ -99,6 +102,7 @@ const api = {
     goForward: () => ipcRenderer.invoke(IPC_CHANNELS.TAB_GO_FORWARD),
     refresh: () => ipcRenderer.invoke(IPC_CHANNELS.TAB_REFRESH),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.TAB_LIST),
+    setOverlay: (visible: boolean) => ipcRenderer.invoke(IPC_CHANNELS.VIEW_SET_OVERLAY, visible),
   },
 
   // ---- Autofill ----
