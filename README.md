@@ -53,10 +53,22 @@ entries and bookmarks. A yellow banner indicates placeholder mode.
 - **Per-site login status** is a separate record keyed by `(loginEntryId, domain)`.
 - Credentials are **not** modeled as per-site records.
 
+## Address bar behavior
+
+Raw address-bar input is normalized via `src/shared/url-utils.ts`:
+
+- valid `http(s)` URL &rarr; used as-is
+- bare domain (`example.com`) &rarr; `https://example.com`
+- `localhost` / `localhost:3000` &rarr; `http://…`
+- anything else &rarr; DuckDuckGo search
+
+If no tab is open when you navigate, a guest tab is created automatically.
+
 ## Status
 
 - ✅ Full browser shell UI (top bar, bookmarks bar, sidebar, tab strip, content area)
 - ✅ Renderer now bundles and loads correctly
 - ✅ Mock/placeholder fallback for offline/unwired runs
+- ✅ Address-bar URL/search normalization (v0.2.0) with unit tests
 - ⚠️ Remaining: verify live `BrowserView` attach/detach bounds against the shell
   chrome height on Windows; real per-site status wiring end-to-end.

@@ -10,6 +10,7 @@ import TabStrip from './components/TabStrip';
 import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus } from '../shared/types';
 import { WebviewTag } from './types.d';
 import { getApi, isMockApi } from './api';
+import { normalizeUrlOrSearch, domainFromUrl } from '../shared/url-utils';
 
 /**
  * Status badge state for each login entry on the current domain.
@@ -284,19 +285,25 @@ export default function App() {
     }
   }, [tabs, api, loadDomainStatuses, loginEntries]);
 
-  const handleNavigate = useCallback(async (url: string) => {
+  const handleNavigate = useCallback(async (input: string) => {
+    // Normalize raw address-bar input: bare domains get https://, and
+    // free text becomes a search query.
+    const url = normalizeUrlOrSearch(input);
+
+    // If there is no active tab yet, open one so navigation has a target.
+    if (!activeTabId) {
+      const res = await api.tabs.createGuest();
+      if (res.success && res.data) {
+        setTabs(prev => [...prev, res.data!]);
+        setActiveTabId(res.data.id);
+        await api.tabs.switch(res.data.id);
+      }
+    }
+
     await api.tabs.navigate(url);
     setCurrentUrl(url);
-
-    // Extract domain
-    try {
-      const parsed = new URL(url);
-      const domain = parsed.hostname.replace(/^www\./, '').toLowerCase();
-      setCurrentDomain(domain);
-    } catch {
-      setCurrentDomain(null);
-    }
-  }, [api]);
+    setCurrentDomain(domainFromUrl(url));
+  }, [api, activeTabId]);
 
   const handleGoBack = useCallback(async () => {
     await api.tabs.goBack();
