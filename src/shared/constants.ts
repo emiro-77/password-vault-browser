@@ -3,7 +3,7 @@
 // ============================================================================
 
 export const APP_NAME = 'Password Vault Browser';
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.3.1';
 export const APP_CODE_NAME = 'pvb';
 
 export const DB_FILENAME = 'pvb-data.db';

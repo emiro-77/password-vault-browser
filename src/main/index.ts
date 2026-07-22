@@ -50,6 +50,18 @@ function createMainWindow(): void {
     },
   });
 
+  // Surface preload failures loudly — a failed preload means window.pvbAPI is
+  // never exposed and the UI silently falls back to placeholder mode.
+  mainWindow.webContents.on('preload-error', (_e, preloadPath, error) => {
+    console.error(`[Main] PRELOAD FAILED to load: ${preloadPath}\n`, error);
+  });
+
+  // Open DevTools automatically when launched in dev/debug so console errors
+  // (incl. preload issues) are visible. Set PVB_DEVTOOLS=1 to force it.
+  if (!app.isPackaged || process.env.PVB_DEVTOOLS === '1') {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
+
   // Load the renderer (the app's own UI shell)
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 

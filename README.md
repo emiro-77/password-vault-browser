@@ -97,6 +97,47 @@ that type-checks + builds + runs tests on every push is provided in
 `ci-templates/README.md`; kept out of `.github/workflows/` because the push
 token lacks the `workflows` permission).
 
+## Troubleshooting
+
+### "Placeholder mode" banner / websites don't load
+
+Placeholder mode means the preload script did not load, so `window.pvbAPI` is
+undefined and the UI falls back to in-memory mock data — navigation does
+nothing and no page (not even DuckDuckGo) opens.
+
+Causes and fixes:
+
+1. **Stale/missing build.** `npm start` runs `electron .` without building.
+   Always build first (or use `npm run dev`, which builds then starts):
+   ```cmd
+   npm run build
+   npm start
+   ```
+   Confirm `dist\preload\index.js` exists afterwards.
+
+2. **Sandboxed preload importing a local module (fixed in v0.3.1).** The main
+   window uses `sandbox: true`; a sandboxed preload may only `require('electron')`
+   and Node built-ins, never local project files. The preload previously did
+   `require('../shared/types')`, which threw and prevented `window.pvbAPI` from
+   being exposed. The channel constants are now inlined in `src/preload/index.ts`
+   (kept in sync with `src/shared/types.ts` by `tests/ipc-channels-sync.test.ts`).
+
+3. **See the real error.** The app now opens DevTools automatically when not
+   packaged (or set `PVB_DEVTOOLS=1`), and logs `PRELOAD FAILED ...` to the
+   terminal via the `preload-error` event. Check the DevTools Console for the
+   exact cause.
+
+### "Electron failed to install correctly"
+
+The Electron binary was not downloaded (skipped scripts, proxy/firewall, or a
+`node_modules` copied from another OS). Reinstall on the target machine:
+```cmd
+rmdir /s /q node_modules
+del package-lock.json
+npm install
+```
+Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
+
 ## Status
 
 - ✅ Full browser shell UI (top bar, bookmarks bar, sidebar, tab strip, content area)
@@ -106,6 +147,8 @@ token lacks the `workflows` permission).
 - ✅ Live BrowserView bounds (chrome height + sidebar aware) and Electron 33
   navigation API (v0.3.0)
 - ✅ Per-site login status refreshed end-to-end after autofill (v0.3.0)
+- ✅ Sandbox-safe preload so `window.pvbAPI` loads and real browsing works —
+  fixes the "placeholder mode / pages don't load" issue (v0.3.1)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to
