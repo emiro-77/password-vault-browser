@@ -84,6 +84,8 @@ export interface TabInfo {
   partitionId: string;
   createdAt: string;
   lastActiveAt: string;
+  /** Live page title (from the page's <title>); used for the tab label. */
+  title?: string;
 }
 
 // ---- Autofill ----

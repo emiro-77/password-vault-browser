@@ -190,6 +190,38 @@ html, body {
   color: var(--text-primary);
 }
 
+/* ---- Address-bar bookmark (star) button ---- */
+
+.bookmark-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.bookmark-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.bookmark-btn.active {
+  color: #f5b301;
+}
+
+.bookmark-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ---- Bookmarks Bar ---- */
 
 .bookmarks-bar {
@@ -411,7 +443,7 @@ html, body {
 .entry-item-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   margin-bottom: 2px;
 }
 
@@ -419,6 +451,35 @@ html, body {
   font-size: var(--font-size-md);
   font-weight: 500;
   color: var(--text-primary);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.entry-delete-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.entry-item:hover .entry-delete-btn {
+  opacity: 1;
+}
+
+.entry-delete-btn:hover {
+  background: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
 }
 
 .entry-username {
@@ -646,6 +707,16 @@ html, body {
 
 .modal-btn.primary:hover {
   background: var(--accent-hover);
+}
+
+.modal-btn.danger {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+.modal-btn.danger:hover {
+  background: #b91c1c;
 }
 
 /* ---- Loading indicator ---- */

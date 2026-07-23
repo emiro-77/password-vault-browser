@@ -31,9 +31,14 @@ export default function TabStrip({
     <div className="tab-strip">
       {tabs.map(tab => {
         const isActive = tab.id === activeTabId;
-        const displayTitle = tab.type === 'guest'
-          ? 'New Tab'
-          : (tab.currentUrl ? truncateUrl(tab.currentUrl) : 'Loading...');
+        const hasPage = tab.currentUrl && tab.currentUrl !== 'about:blank';
+        // Prefer the live page title; fall back to the site host from the URL;
+        // only show "New Tab" when nothing has been loaded yet.
+        const displayTitle = tab.title && tab.title.trim()
+          ? tab.title.trim()
+          : hasPage
+            ? truncateUrl(tab.currentUrl)
+            : 'New Tab';
         const maxTitleLength = 25;
 
         return (

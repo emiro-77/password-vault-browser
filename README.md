@@ -14,7 +14,7 @@ site (domain), and per-site login *status* is tracked for each site.
   - `components/AddressBar.tsx` — back / forward / refresh / URL input / new tab
   - `components/BookmarksBar.tsx` — bookmarks bar
   - `components/Sidebar.tsx` — saved login entries (label, username/email,
-    per-site status badge)
+    per-site status badge, per-entry delete button with confirm modal)
   - `components/TabStrip.tsx` — visible, switchable tabs + new-tab button
   - `App.tsx` — composes the shell and coordinates tabs/navigation via IPC
 
@@ -169,6 +169,12 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   `tabs.setOverlay`) so its inputs and Cancel/Add buttons work (v0.3.2, fixes #1/#2)
 - ✅ Per-site accounts: sidebar and "add account" are scoped to the current site;
   duplicate username/email on the same site is rejected (v0.3.2, fixes #1/#3)
+- ✅ Address-bar star toggles a bookmark for the current page (replaces the old
+  address-bar "+"; the tab strip keeps its own new-tab button) (v0.3.3)
+- ✅ Open tabs show the real site name (live page `<title>`, else the host) for
+  the active and background tabs, instead of always "New Tab" (v0.3.3)
+- ✅ Each account in the sidebar has a delete (✕) button with a confirmation
+  modal before removal (v0.3.3)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

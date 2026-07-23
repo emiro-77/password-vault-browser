@@ -24,9 +24,10 @@ interface SidebarProps {
   currentDomain: string | null;
   onSelectEntry: (loginEntryId: string) => void;
   onAddEntry: () => void;
+  onDeleteEntry: (loginEntryId: string) => void;
 }
 
-export default function Sidebar({ entries, currentDomain, onSelectEntry, onAddEntry }: SidebarProps) {
+export default function Sidebar({ entries, currentDomain, onSelectEntry, onAddEntry, onDeleteEntry }: SidebarProps) {
   const formatStatusLabel = (status: LoginStatus | null): string => {
     switch (status) {
       case 'logged_in': return 'Logged in';
@@ -112,6 +113,16 @@ export default function Sidebar({ entries, currentDomain, onSelectEntry, onAddEn
                   <span className={`status-badge ${badgeClass}`}>
                     {formatStatusLabel(status)}
                   </span>
+                  <button
+                    className="entry-delete-btn"
+                    title="Delete account"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteEntry(entry.id);
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
 
                 <div className="entry-username truncate">

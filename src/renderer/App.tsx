@@ -329,6 +329,13 @@ export default function App() {
 
   useEffect(() => {
     const unsub1 = api.on('event:tab-url-changed', (data: any) => {
+      // Keep the tab strip in sync for ANY tab (not just the active one) so
+      // each tab shows the real site it navigated to instead of "New Tab".
+      setTabs(prev => prev.map(t =>
+        t.id === data.tabId
+          ? { ...t, currentUrl: data.url, domain: data.domain }
+          : t
+      ));
       if (data.tabId === activeTabId) {
         setCurrentUrl(data.url);
         setCurrentDomain(data.domain);
@@ -341,6 +348,11 @@ export default function App() {
     });
 
     const unsub2 = api.on('event:page-title-changed', (data: any) => {
+      // Store the live page title on the tab so the tab strip label reflects
+      // the actual site name (e.g. "Claude"), for the active or background tab.
+      setTabs(prev => prev.map(t =>
+        t.id === data.tabId ? { ...t, title: data.title } : t
+      ));
       if (data.tabId === activeTabId) {
         setCurrentTitle(data.title);
       }
@@ -432,6 +444,53 @@ export default function App() {
     }
   }, [modalData, api, loadLoginEntries, currentDomain]);
 
+  // ---- Bookmark handler (#1: star button in the address bar) ----
+
+  const isCurrentBookmarked = !!currentUrl && bookmarks.some(b => b.url === currentUrl);
+
+  const handleAddBookmark = useCallback(async () => {
+    if (!currentUrl || currentUrl === 'about:blank') return;
+    // Toggle: if already bookmarked, remove it; otherwise add it.
+    const existing = bookmarks.find(b => b.url === currentUrl);
+    if (existing) {
+      const res = await api.bookmarks.delete(existing.id);
+      if (res.success) loadBookmarks();
+      return;
+    }
+    const res = await api.bookmarks.create({
+      title: currentTitle && currentTitle !== 'Loading...' ? currentTitle : (currentDomain || currentUrl),
+      url: currentUrl,
+    });
+    if (res.success) loadBookmarks();
+  }, [api, currentUrl, currentTitle, currentDomain, bookmarks, loadBookmarks]);
+
+  // ---- Delete-account flow (#3: cross icon + confirm modal) ----
+
+  const [entryToDelete, setEntryToDelete] = useState<LoginEntry | null>(null);
+
+  const handleRequestDeleteEntry = useCallback((loginEntryId: string) => {
+    const entry = loginEntries.find(e => e.id === loginEntryId) || null;
+    if (!entry) return;
+    setEntryToDelete(entry);
+    // Show the HTML confirm modal on top of any loaded page.
+    api.tabs.setOverlay(true);
+  }, [loginEntries, api]);
+
+  const handleCancelDeleteEntry = useCallback(() => {
+    setEntryToDelete(null);
+    api.tabs.setOverlay(false);
+  }, [api]);
+
+  const handleConfirmDeleteEntry = useCallback(async () => {
+    if (!entryToDelete) return;
+    const res = await api.credentials.delete(entryToDelete.id);
+    if (res.success) {
+      setEntryToDelete(null);
+      api.tabs.setOverlay(false);
+      loadLoginEntries(currentDomain);
+    }
+  }, [entryToDelete, api, loadLoginEntries, currentDomain]);
+
   // ---- Render ----
 
   return (
@@ -454,7 +513,8 @@ export default function App() {
           onGoBack={handleGoBack}
           onGoForward={handleGoForward}
           onRefresh={handleRefresh}
-          onNewTab={handleNewGuestTab}
+          onAddBookmark={handleAddBookmark}
+          isBookmarked={isCurrentBookmarked}
         />
 
         {/* Bookmarks bar */}
@@ -480,6 +540,7 @@ export default function App() {
           currentDomain={currentDomain}
           onSelectEntry={handleSelectLoginEntry}
           onAddEntry={handleOpenAddEntryModal}
+          onDeleteEntry={handleRequestDeleteEntry}
         />
 
         <div className="browser-area" ref={contentRef}>
@@ -550,6 +611,30 @@ export default function App() {
                 disabled={!modalData.label || !modalData.usernameOrEmail || !modalData.password}
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Confirmation Modal (#3) */}
+      {entryToDelete && (
+        <div className="modal-overlay" onClick={handleCancelDeleteEntry}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Delete account?</div>
+            <div className="modal-subtitle">This action cannot be undone.</div>
+
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 8px' }}>
+              Are you sure you want to delete{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>{entryToDelete.label}</strong>
+              {' '}(<span>{entryToDelete.usernameOrEmail}</span>)
+              {entryToDelete.domain ? <> for <strong>{entryToDelete.domain}</strong></> : null}?
+            </p>
+
+            <div className="modal-actions">
+              <button className="modal-btn" onClick={handleCancelDeleteEntry}>Cancel</button>
+              <button className="modal-btn danger" onClick={handleConfirmDeleteEntry}>
+                Delete
               </button>
             </div>
           </div>

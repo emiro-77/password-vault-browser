@@ -14,7 +14,8 @@ interface AddressBarProps {
   onGoBack: () => void;
   onGoForward: () => void;
   onRefresh: () => void;
-  onNewTab: () => void;
+  onAddBookmark: () => void;
+  isBookmarked?: boolean;
 }
 
 export default function AddressBar({
@@ -27,7 +28,8 @@ export default function AddressBar({
   onGoBack,
   onGoForward,
   onRefresh,
-  onNewTab,
+  onAddBookmark,
+  isBookmarked = false,
 }: AddressBarProps) {
   const [inputValue, setInputValue] = useState(url);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,13 +114,14 @@ export default function AddressBar({
         {title}
       </span>
 
-      {/* New tab button */}
+      {/* Add-to-bookmark star button */}
       <button
-        className="new-tab-btn"
-        onClick={onNewTab}
-        title="New tab"
+        className={`bookmark-btn${isBookmarked ? ' active' : ''}`}
+        onClick={onAddBookmark}
+        disabled={!url || url === 'about:blank'}
+        title={isBookmarked ? 'Bookmarked' : 'Add bookmark'}
       >
-        +
+        {isBookmarked ? '★' : '☆'}
       </button>
     </div>
   );
