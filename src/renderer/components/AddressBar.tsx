@@ -19,6 +19,7 @@ interface AddressBarProps {
   isBookmarked?: boolean;
   theme: Theme;
   onToggleTheme: () => void;
+  onOpenSettings: () => void;
 }
 
 export default function AddressBar({
@@ -35,6 +36,7 @@ export default function AddressBar({
   isBookmarked = false,
   theme,
   onToggleTheme,
+  onOpenSettings,
 }: AddressBarProps) {
   const [inputValue, setInputValue] = useState(url);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -126,6 +128,16 @@ export default function AddressBar({
 
       {/* Light / Night theme toggle */}
       <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+
+      {/* Settings button */}
+      <button
+        className="settings-btn"
+        onClick={onOpenSettings}
+        title="Settings"
+        aria-label="Open settings"
+      >
+        ⚙
+      </button>
     </div>
   );
 }

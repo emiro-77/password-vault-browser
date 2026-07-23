@@ -63,6 +63,10 @@ const IPC_CHANNELS = {
   SITE_RULES_GET:         'site-rules:get',
   SITE_RULES_SET:         'site-rules:set',
 
+  // Settings
+  SETTINGS_SITE_ACCOUNTS: 'settings:site-accounts',
+  SETTINGS_CLEAR_DATA:    'settings:clear-data',
+
   // Events (main -> renderer)
   EVENT_TAB_CREATED:      'event:tab-created',
   EVENT_TAB_CLOSED:       'event:tab-closed',
@@ -148,6 +152,12 @@ const api = {
   siteRules: {
     get: (domain: string) => ipcRenderer.invoke(IPC_CHANNELS.SITE_RULES_GET, domain),
     set: (data: any) => ipcRenderer.invoke(IPC_CHANNELS.SITE_RULES_SET, data),
+  },
+
+  // ---- Settings ----
+  settings: {
+    siteAccounts: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SITE_ACCOUNTS),
+    clearData: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CLEAR_DATA, req),
   },
 
   // ---- Event Listeners ----

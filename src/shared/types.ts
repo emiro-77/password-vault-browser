@@ -9,6 +9,7 @@
 export type LoginStatus =
   | 'never_used'
   | 'logged_in'
+  | 'used'            // was the active account, then superseded (shown red)
   | 'expired'
   | 'login_failed'
   | 'needs_2fa'
@@ -87,6 +88,34 @@ export interface CategoryUpdateRequest {
   scope?: CategoryScope;
   domain?: string;
   accountIds?: string[];
+}
+
+// ---- Settings: site account management ----
+
+/** One account row within a site group, with its current per-site status. */
+export interface SiteAccountInfo {
+  loginEntryId: string;
+  label: string;
+  usernameOrEmail: string;
+  status: LoginStatus;          // computed per-site status for this domain
+  lastUsedAt: string | null;
+}
+
+/** A site (domain) and the accounts saved for it. */
+export interface SiteAccountsGroup {
+  domain: string;               // '' for unscoped/legacy accounts
+  accounts: SiteAccountInfo[];
+}
+
+/** What kinds of browsing data to clear. */
+export interface ClearDataRequest {
+  cache?: boolean;              // HTTP cache
+  cookies?: boolean;            // cookies + site storage (localStorage, etc.)
+  storage?: boolean;            // IndexedDB / service workers / caches
+}
+
+export interface ClearDataResult {
+  cleared: string[];            // human-readable list of what was cleared
 }
 
 // ---- Bookmark ----
@@ -177,6 +206,10 @@ export const IPC_CHANNELS = {
   // Site Rules (future extension)
   SITE_RULES_GET:         'site-rules:get',
   SITE_RULES_SET:         'site-rules:set',
+
+  // Settings
+  SETTINGS_SITE_ACCOUNTS: 'settings:site-accounts',
+  SETTINGS_CLEAR_DATA:    'settings:clear-data',
 
   // Events (main -> renderer)
   EVENT_TAB_CREATED:      'event:tab-created',

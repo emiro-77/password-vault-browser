@@ -20,6 +20,7 @@ export class StatusManager {
    */
   getForDomain(domain: string): (SiteLoginStatus & { loginLabel: string; loginUsername: string })[] {
     const db = getDatabase();
+    this.expireStale(Date.now());
     const rows = db.prepare(`
       SELECT s.*, l.label as login_label, l.username_or_email as login_username
       FROM site_login_status s
@@ -54,6 +55,7 @@ export class StatusManager {
    */
   getForLoginEntry(loginEntryId: string): SiteLoginStatus[] {
     const db = getDatabase();
+    this.expireStale(Date.now());
     const rows = db.prepare(
       'SELECT * FROM site_login_status WHERE login_entry_id = ?'
     ).all(loginEntryId) as any[];
@@ -80,6 +82,7 @@ export class StatusManager {
    */
   getAll(): (SiteLoginStatus & { loginLabel: string; loginUsername: string })[] {
     const db = getDatabase();
+    this.expireStale(Date.now());
     const rows = db.prepare(`
       SELECT s.*, l.label as login_label, l.username_or_email as login_username
       FROM site_login_status s
@@ -107,15 +110,50 @@ export class StatusManager {
   }
 
   /**
-   * Mark a login entry as "logged_in" for a domain.
-   * Sets logged_in_until = now + 24h.
+   * Mark a login entry as the active account for a domain.
+   *
+   * Only ONE account per domain may be the "active tab" (the last logged-in
+   * account). Any other account on this domain that was previously active is
+   * demoted to "used" (shown red) so the sidebar always shows exactly one
+   * active account.
+   *
+   * The 24h window is tracked from the FIRST login: `first_login_at` and
+   * `logged_in_until` are only set the first time (or once a previous window
+   * has fully expired / been reset), not on every re-selection.
    */
   markLoggedIn(loginEntryId: string, domain: string, tabId: string): SiteLoginStatus {
+    const db = getDatabase();
+    const nowIso = new Date().toISOString();
+
+    // Demote every OTHER active account on this domain to "used" and clear its
+    // active tab link — there can be only one active account per domain.
+    db.prepare(`
+      UPDATE site_login_status
+      SET status = 'used', active_tab_id = NULL, last_used_at = ?
+      WHERE domain = ? AND login_entry_id != ?
+        AND (active_tab_id IS NOT NULL OR status IN ('logged_in','active_tab_open'))
+    `).run(nowIso, domain, loginEntryId);
+
+    // Determine whether the 24h window should (re)start. It starts if there is
+    // no prior first_login_at, or the previous window has fully lapsed.
+    const existing = db.prepare(
+      'SELECT * FROM site_login_status WHERE login_entry_id = ? AND domain = ?'
+    ).get(loginEntryId, domain) as any;
+
+    const windowExpired = !existing?.first_login_at
+      || !existing?.logged_in_until
+      || Date.now() > new Date(existing.logged_in_until).getTime();
+
+    const firstLoginAt = windowExpired ? nowIso : existing.first_login_at;
+    const loggedInUntil = windowExpired
+      ? new Date(Date.now() + LOGGED_IN_DURATION_MS).toISOString()
+      : existing.logged_in_until;
+
     return this.upsertStatus(loginEntryId, domain, {
       status: 'logged_in',
-      firstLoginAt: new Date().toISOString(),
-      loggedInUntil: new Date(Date.now() + LOGGED_IN_DURATION_MS).toISOString(),
-      lastUsedAt: new Date().toISOString(),
+      firstLoginAt,
+      loggedInUntil,
+      lastUsedAt: nowIso,
       activeTabId: tabId,
     });
   }
@@ -144,6 +182,7 @@ export class StatusManager {
    */
   getForEntryAndDomain(loginEntryId: string, domain: string): SiteLoginStatus | null {
     const db = getDatabase();
+    this.expireStale(Date.now());
     const row = db.prepare(
       'SELECT * FROM site_login_status WHERE login_entry_id = ? AND domain = ?'
     ).get(loginEntryId, domain) as any;
@@ -265,24 +304,55 @@ export class StatusManager {
   }
 
   /**
-   * Compute the effective status considering expiry.
+   * Compute the effective status considering the 24h expiry window.
    * Internal helper.
+   *
+   * Rules:
+   * - After 24h from the first login, any active/used/logged_in status resets
+   *   to "never_used" (the app also clears the stored row lazily; see
+   *   expireStale). This is what "refresh to never used after 24 hours" means.
+   * - An account that still has an active tab link and an unexpired window is
+   *   the single active account -> "active_tab_open".
+   * - A logged_in account without an active tab has been superseded -> "used".
    */
   private computeCurrentStatus(row: any, nowMs: number): LoginStatus {
-    // If there's an active tab, report active_tab_open
+    // 24h window check: once the window lapses, the account is "never_used".
+    if (row.logged_in_until) {
+      const untilMs = new Date(row.logged_in_until).getTime();
+      if (nowMs > untilMs) {
+        return 'never_used';
+      }
+    }
+
+    // Within the window, an account with a live active tab is THE active one.
     if (row.active_tab_id) {
       return 'active_tab_open';
     }
 
-    // If logged_in_until is past, status is expired
-    if (row.status === 'logged_in' && row.logged_in_until) {
-      const untilMs = new Date(row.logged_in_until).getTime();
-      if (nowMs > untilMs) {
-        return 'expired';
-      }
+    // A previously logged-in account that no longer holds the active tab has
+    // been used (and superseded) -> "used" (red).
+    if (row.status === 'logged_in' || row.status === 'active_tab_open') {
+      return 'used';
     }
 
     return row.status as LoginStatus;
+  }
+
+  /**
+   * Lazily reset rows whose 24h window has fully lapsed back to "never_used"
+   * and clear their active tab link. Keeps the persisted state consistent with
+   * the computed status. Safe to call on every read.
+   */
+  private expireStale(nowMs: number): void {
+    const db = getDatabase();
+    db.prepare(`
+      UPDATE site_login_status
+      SET status = 'never_used', active_tab_id = NULL,
+          first_login_at = NULL, logged_in_until = NULL
+      WHERE logged_in_until IS NOT NULL
+        AND status != 'never_used'
+        AND ? > CAST(strftime('%s', logged_in_until) AS INTEGER) * 1000
+    `).run(nowMs);
   }
 }
 

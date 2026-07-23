@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS site_login_status (
   domain           TEXT NOT NULL,
   status           TEXT NOT NULL DEFAULT 'never_used'
                      CHECK (status IN (
-                       'never_used','logged_in','expired',
+                       'never_used','logged_in','used','expired',
                        'login_failed','needs_2fa','active_tab_open'
                      )),
   first_login_at   TEXT,

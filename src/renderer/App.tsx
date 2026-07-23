@@ -8,6 +8,7 @@ import BookmarksBar from './components/BookmarksBar';
 import Sidebar from './components/Sidebar';
 import TabStrip from './components/TabStrip';
 import CategoryModal from './components/CategoryModal';
+import SettingsPanel from './components/SettingsPanel';
 import { Theme } from './components/ThemeToggle';
 import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus, Category } from '../shared/types';
 import { WebviewTag } from './types.d';
@@ -71,6 +72,9 @@ export default function App() {
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
+  // Settings tab (opens above the browser view).
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   const contentRef = useRef<HTMLDivElement>(null);
   const webviewRef = useRef<WebviewTag | null>(null);
 
@@ -90,6 +94,18 @@ export default function App() {
   const handleToggleTheme = useCallback(() => {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   }, []);
+
+  // ---- Settings ----
+
+  const handleOpenSettings = useCallback(() => {
+    setSettingsOpen(true);
+    api.tabs.setOverlay(true);
+  }, [api]);
+
+  const handleCloseSettings = useCallback(() => {
+    setSettingsOpen(false);
+    api.tabs.setOverlay(false);
+  }, [api]);
 
   // ---- Sidebar collapse (Feature 2) ----
 
@@ -646,6 +662,7 @@ export default function App() {
           isBookmarked={isCurrentBookmarked}
           theme={theme}
           onToggleTheme={handleToggleTheme}
+          onOpenSettings={handleOpenSettings}
         />
 
         {/* Bookmarks bar */}
@@ -683,7 +700,7 @@ export default function App() {
         />
 
         <div className="browser-area" ref={contentRef}>
-          {!activeTabId && (
+          {!activeTabId && !settingsOpen && (
             <div className="empty-state">
               <div className="empty-state-icon">🌐</div>
               <div className="empty-state-text">Open a tab to start browsing</div>
@@ -691,6 +708,11 @@ export default function App() {
                 + New Tab
               </button>
             </div>
+          )}
+
+          {/* Settings tab — fills the browser area (view detached via overlay) */}
+          {settingsOpen && (
+            <SettingsPanel onClose={handleCloseSettings} />
           )}
         </div>
       </div>
@@ -790,6 +812,7 @@ export default function App() {
           onSave={handleSaveCategory}
         />
       )}
+
     </div>
   );
 }

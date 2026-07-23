@@ -150,6 +150,25 @@ function createMockApi(): PvbAPI & { __isMock: true } {
       execute: () => Promise.resolve({ success: false, error: 'mock: no live page' }),
     },
 
+    settings: {
+      siteAccounts: () => ok([
+        {
+          domain: 'example.com',
+          accounts: [
+            { loginEntryId: 'mock-1', label: 'Personal Email', usernameOrEmail: 'you@example.com', status: 'active_tab_open' as const, lastUsedAt: now() },
+            { loginEntryId: 'mock-2', label: 'Work Account', usernameOrEmail: 'you@company.com', status: 'used' as const, lastUsedAt: now() },
+          ],
+        },
+        {
+          domain: '',
+          accounts: [
+            { loginEntryId: 'mock-3', label: 'Social Media', usernameOrEmail: '@yourhandle', status: 'never_used' as const, lastUsedAt: null },
+          ],
+        },
+      ]),
+      clearData: () => ok({ cleared: ['cache', 'cookies', 'site storage'] }),
+    },
+
     sendChromeHeight: () => { /* no-op in mock mode */ },
     sendTheme: () => { /* no-op in mock mode */ },
     sendSidebarWidth: () => { /* no-op in mock mode */ },

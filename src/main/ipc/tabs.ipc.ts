@@ -59,8 +59,12 @@ export function registerTabsIpc(): void {
       if (domain) {
         const existingTab = tabManager.findTabByLoginAndDomain(loginEntryId, domain);
         if (existingTab) {
-          // Switch to existing tab
+          // Switch to existing tab. Re-mark this account as the active one so
+          // any previously-active account on this domain becomes "used" and
+          // this one takes over the single active-tab slot.
           await tabManager.switchToTab(existingTab.id);
+          statusManager.markLoggedIn(loginEntryId, domain, existingTab.id);
+          emitStatusChanged(domain);
           return { success: true, data: { ...existingTab, switched: true } };
         }
       }

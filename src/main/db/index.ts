@@ -51,6 +51,10 @@ export function initDatabase(): Database.Database {
   // Migrate older databases that predate the per-site `domain` column.
   migrateAddDomainColumn(db);
 
+  // Migrate the site_login_status CHECK constraint to allow the new 'used'
+  // status (existing DBs still have the old CHECK from CREATE TABLE).
+  migrateStatusCheckAllowUsed(db);
+
   console.log('[DB] Schema initialized successfully.');
 
   return db;
@@ -81,6 +85,54 @@ function migrateAddDomainColumn(database: Database.Database): void {
     }
   } catch (err) {
     console.error('[DB] domain-column migration failed:', err);
+  }
+}
+
+/**
+ * Rebuild site_login_status so its CHECK constraint permits the 'used' status.
+ * SQLite can't ALTER a CHECK, so if the existing table's SQL lacks 'used' we
+ * recreate the table (preserving rows). Safe to run repeatedly.
+ */
+function migrateStatusCheckAllowUsed(database: Database.Database): void {
+  try {
+    const row = database.prepare(
+      `SELECT sql FROM sqlite_master WHERE type='table' AND name='site_login_status'`
+    ).get() as { sql?: string } | undefined;
+
+    // Only migrate if the table exists and its CHECK does not already list 'used'.
+    if (!row?.sql || /'used'/.test(row.sql)) return;
+
+    console.log('[DB] Migrating: rebuilding site_login_status to allow "used" status');
+    const migrate = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE site_login_status_new (
+          id               TEXT PRIMARY KEY,
+          login_entry_id   TEXT NOT NULL REFERENCES login_entries(id) ON DELETE CASCADE,
+          domain           TEXT NOT NULL,
+          status           TEXT NOT NULL DEFAULT 'never_used'
+                             CHECK (status IN (
+                               'never_used','logged_in','used','expired',
+                               'login_failed','needs_2fa','active_tab_open'
+                             )),
+          first_login_at   TEXT,
+          logged_in_until  TEXT,
+          last_used_at     TEXT,
+          active_tab_id    TEXT,
+          UNIQUE(login_entry_id, domain)
+        );
+      `);
+      database.exec(`
+        INSERT INTO site_login_status_new
+          (id, login_entry_id, domain, status, first_login_at, logged_in_until, last_used_at, active_tab_id)
+        SELECT id, login_entry_id, domain, status, first_login_at, logged_in_until, last_used_at, active_tab_id
+        FROM site_login_status;
+      `);
+      database.exec(`DROP TABLE site_login_status;`);
+      database.exec(`ALTER TABLE site_login_status_new RENAME TO site_login_status;`);
+    });
+    migrate();
+  } catch (err) {
+    console.error('[DB] status-check migration failed:', err);
   }
 }
 

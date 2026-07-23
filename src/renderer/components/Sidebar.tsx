@@ -61,6 +61,7 @@ export default function Sidebar({
   const formatStatusLabel = (status: LoginStatus | null): string => {
     switch (status) {
       case 'logged_in': return 'Logged in';
+      case 'used': return 'Used';
       case 'expired': return 'Expired';
       case 'never_used': return 'Never used';
       case 'login_failed': return 'Login failed';
@@ -173,14 +174,16 @@ export default function Sidebar({
             </div>
           )
         ) : collapsed ? (
-          // ---- Minimized mode: only labels. Active = green, others = white.
-          //      Used-but-inactive labels are hidden (per spec). ----
+          // ---- Minimized mode: only labels for accounts whose status is
+          //      "never used" or "active tab" (the single active account).
+          //      Active = green, never-used = white. "Used" accounts are
+          //      hidden here (per spec). ----
           entries
-            .filter(({ status }) => isActive(status) || status === 'never_used' || status === null)
+            .filter(({ status }) => status === 'active_tab_open' || status === 'never_used' || status === null)
             .map(({ entry, status }) => (
               <button
                 key={entry.id}
-                className={`entry-mini${isActive(status) ? ' active' : ''}`}
+                className={`entry-mini${status === 'active_tab_open' ? ' active' : ''}`}
                 title={entry.label}
                 onClick={() => onSelectEntry(entry.id)}
               >
@@ -209,7 +212,7 @@ export default function Sidebar({
 
                 <div className="entry-username truncate">{entry.usernameOrEmail}</div>
 
-                {status === 'logged_in' && statusInfo && (
+                {(status === 'active_tab_open' || status === 'used') && statusInfo?.loggedInUntil && (
                   <div className="entry-time-remaining">{formatTimeRemaining(statusInfo)}</div>
                 )}
 

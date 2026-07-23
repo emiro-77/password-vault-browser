@@ -9,6 +9,7 @@ import { registerStatusIpc } from './status.ipc';
 import { registerTabsIpc } from './tabs.ipc';
 import { registerAutofillIpc } from './autofill.ipc';
 import { registerSiteRulesIpc } from './site-rules.ipc';
+import { registerSettingsIpc } from './settings.ipc';
 
 /**
  * Register all IPC handlers for the application.
@@ -24,6 +25,7 @@ export function registerAllIpcHandlers(): void {
   registerTabsIpc();
   registerAutofillIpc();
   registerSiteRulesIpc();
+  registerSettingsIpc();
 
   console.log('[IPC] All IPC handlers registered.');
 }

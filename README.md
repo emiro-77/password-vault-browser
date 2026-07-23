@@ -149,6 +149,49 @@ If no tab is open when you navigate, a guest tab is created automatically.
   auto-create on next launch — no manual migration. Managed by
   `src/main/services/category-manager.ts` over the `categories:*` IPC channels.
 
+## Settings tab & account-status model (v0.5.0)
+
+### Settings tab
+
+A ⚙ button in the address bar's right cluster opens a **Settings** surface that
+fills the browser area (the `BrowserView` is detached via `tabs.setOverlay`, so
+the panel is fully interactive). It has two sections:
+
+- **Site accounts** — every site that has saved accounts, grouped by domain,
+  with each account's label, username/email and current per-site status badge.
+  Unscoped/legacy accounts are grouped separately.
+- **Data management** — clear the browser's **cache**, **cookies**, and/or
+  **site storage** (localStorage / IndexedDB / service workers). This clears the
+  default session and every open tab's isolated partition session; it does
+  **not** delete saved accounts.
+
+Backed by `src/main/ipc/settings.ipc.ts` over the `settings:site-accounts` and
+`settings:clear-data` IPC channels.
+
+### Account status model (revised)
+
+Per-site status is computed by `StatusManager.computeCurrentStatus`:
+
+- **Active tab** (green) — the single most-recently-logged-in account on a
+  domain. There is only ever **one** active account per domain: marking an
+  account active demotes any previously-active account to **Used**.
+- **Used** (red) — an account that was logged in / active but has since been
+  superseded by another account (or had its tab closed).
+- **Never used** (muted) — no login recorded, or the 24h window has lapsed.
+- The **24h window** is tracked from the *first* login (`first_login_at` /
+  `logged_in_until`). Once it lapses, the account's status **refreshes back to
+  "never used"** and its active-tab link is cleared (done lazily on every read
+  via `expireStale`).
+
+Switching to another account for a site (from the sidebar or by opening its
+tab) re-marks it active and flips the previous one to **Used**. The minimized
+vault sidebar shows labels only for accounts whose status is **never used**
+(white) or **active tab** (green) — **Used** accounts are hidden there.
+
+The new `'used'` status was added to the `LoginStatus` union, the DB
+`CHECK` constraint (with a migration in `src/main/db/index.ts` that rebuilds
+`site_login_status` for existing databases), and the sidebar/settings badges.
+
 ## Testing & CI
 
 Unit tests live in `tests/` and run with `tsx`:
@@ -234,6 +277,11 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
 - ✅ Categories/folders: bottom category bar with drag-scroll overflow,
   right-click edit/delete, create/edit modal (icon picker + custom upload,
   account checklist), and Global vs Private (site-specific) scope (v0.4.0)
+- ✅ Settings tab (⚙): site-account management (accounts grouped by site with
+  their status) and data management (clear cache / cookies / site storage) (v0.5.0)
+- ✅ Revised status model: single "active tab" per site, new "Used" (red) status
+  for superseded accounts, and a 24h window that refreshes to "never used"; the
+  minimized sidebar shows only never-used and active-tab accounts (v0.5.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to
