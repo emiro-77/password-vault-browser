@@ -30,6 +30,13 @@ const IPC_CHANNELS = {
   BOOKMARKS_DELETE:       'bookmarks:delete',
   BOOKMARKS_REORDER:      'bookmarks:reorder',
 
+  // Categories / folders
+  CATEGORIES_LIST:        'categories:list',
+  CATEGORIES_CREATE:      'categories:create',
+  CATEGORIES_UPDATE:      'categories:update',
+  CATEGORIES_DELETE:      'categories:delete',
+  CATEGORIES_REORDER:     'categories:reorder',
+
   // Site Status
   STATUS_GET_FOR_DOMAIN:  'status:get-for-domain',
   STATUS_GET_ALL:         'status:get-all',
@@ -70,7 +77,7 @@ const IPC_CHANNELS = {
 const api = {
   // ---- Credentials ----
   credentials: {
-    list: () => ipcRenderer.invoke(IPC_CHANNELS.CREDENTIALS_LIST),
+    list: (domain?: string) => ipcRenderer.invoke(IPC_CHANNELS.CREDENTIALS_LIST, domain),
     create: (data: any) => ipcRenderer.invoke(IPC_CHANNELS.CREDENTIALS_CREATE, data),
     update: (data: any) => ipcRenderer.invoke(IPC_CHANNELS.CREDENTIALS_UPDATE, data),
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.CREDENTIALS_DELETE, id),
@@ -82,6 +89,15 @@ const api = {
     create: (data: any) => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_CREATE, data),
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_DELETE, id),
     reorder: (orderedIds: string[]) => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_REORDER, orderedIds),
+  },
+
+  // ---- Categories / folders ----
+  categories: {
+    list: (domain?: string) => ipcRenderer.invoke(IPC_CHANNELS.CATEGORIES_LIST, domain),
+    create: (data: any) => ipcRenderer.invoke(IPC_CHANNELS.CATEGORIES_CREATE, data),
+    update: (data: any) => ipcRenderer.invoke(IPC_CHANNELS.CATEGORIES_UPDATE, data),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.CATEGORIES_DELETE, id),
+    reorder: (orderedIds: string[]) => ipcRenderer.invoke(IPC_CHANNELS.CATEGORIES_REORDER, orderedIds),
   },
 
   // ---- Site Status ----
@@ -114,6 +130,18 @@ const api = {
   // ---- UI Coordination ----
   sendChromeHeight: (height: number) => {
     ipcRenderer.send('browser:chrome-height', height);
+  },
+
+  // Tell the main process which theme is active so loaded websites can follow
+  // it via prefers-color-scheme (best-effort).
+  sendTheme: (theme: 'light' | 'dark') => {
+    ipcRenderer.send('browser:set-theme', theme);
+  },
+
+  // Tell the main process the current vault sidebar width so the web view is
+  // repositioned when the sidebar collapses/expands.
+  sendSidebarWidth: (width: number) => {
+    ipcRenderer.send('browser:sidebar-width', width);
   },
 
   // ---- Site Rules ----

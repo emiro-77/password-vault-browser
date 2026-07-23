@@ -10,7 +10,7 @@
 // 4. Creates an initial guest tab
 // 5. Handles app lifecycle (close, window events)
 
-import { app, BrowserWindow, screen, ipcMain } from 'electron';
+import { app, BrowserWindow, screen, ipcMain, nativeTheme } from 'electron';
 import * as path from 'path';
 import { initDatabase, closeDatabase } from './db';
 import { initCredentialStore } from './services/credential-store';
@@ -109,6 +109,18 @@ async function initializeServices(): Promise<void> {
   // 5. Update view bounds whenever the renderer tells us chrome height
   ipcMain.on('browser:chrome-height', (_event: any, chromeHeight: number) => {
     tabManager.updateActiveViewBounds(chromeHeight);
+  });
+
+  // 6. Theme: propagate the chosen theme to Chromium's nativeTheme so loaded
+  //    websites that honor `prefers-color-scheme` follow the app theme too.
+  ipcMain.on('browser:set-theme', (_event: any, theme: 'light' | 'dark') => {
+    nativeTheme.themeSource = theme === 'light' ? 'light' : 'dark';
+  });
+
+  // 7. Sidebar width: reposition the active web view when the vault sidebar
+  //    collapses/expands so the BrowserView follows the shell layout.
+  ipcMain.on('browser:sidebar-width', (_event: any, sidebarWidth: number) => {
+    tabManager.updateSidebarWidth(sidebarWidth);
   });
 
   console.log('[Main] All services initialized.');

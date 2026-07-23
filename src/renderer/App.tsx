@@ -7,10 +7,15 @@ import AddressBar from './components/AddressBar';
 import BookmarksBar from './components/BookmarksBar';
 import Sidebar from './components/Sidebar';
 import TabStrip from './components/TabStrip';
-import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus } from '../shared/types';
+import CategoryModal from './components/CategoryModal';
+import { Theme } from './components/ThemeToggle';
+import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus, Category } from '../shared/types';
 import { WebviewTag } from './types.d';
 import { getApi, isMockApi } from './api';
 import { normalizeUrlOrSearch, domainFromUrl } from '../shared/url-utils';
+
+const THEME_KEY = 'pvb-theme';
+const SIDEBAR_COLLAPSED_KEY = 'pvb-sidebar-collapsed';
 
 /**
  * Status badge state for each login entry on the current domain.
@@ -49,11 +54,59 @@ export default function App() {
 
   const [showAddEntryModal, setShowAddEntryModal] = useState(false);
 
+  // Feature 1: theme (night mode is the default).
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(THEME_KEY) : null;
+    return saved === 'light' ? 'light' : 'dark';
+  });
+
+  // Feature 2: collapsed/minimized vault sidebar.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+  });
+
+  // Feature 3: categories for the current site + the active category filter.
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+
   const contentRef = useRef<HTMLDivElement>(null);
   const webviewRef = useRef<WebviewTag | null>(null);
 
   const api = getApi();
   const mockMode = isMockApi();
+
+  // ---- Theme (Feature 1) ----
+
+  useEffect(() => {
+    // Apply to the shell UI via a root attribute (night mode = default/no attr).
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ }
+    // Best-effort: make loaded websites follow the theme via prefers-color-scheme.
+    api.sendTheme?.(theme);
+  }, [theme, api]);
+
+  const handleToggleTheme = useCallback(() => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  // ---- Sidebar collapse (Feature 2) ----
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  // Report the current sidebar width to the main process so the BrowserView is
+  // repositioned to follow the collapsed/expanded sidebar (must match the CSS
+  // widths: 280px expanded, 120px collapsed).
+  useEffect(() => {
+    api.sendSidebarWidth?.(sidebarCollapsed ? 120 : 280);
+  }, [sidebarCollapsed, api]);
 
   // ---- Data loading ----
 
@@ -70,6 +123,17 @@ export default function App() {
     const res = await api.bookmarks.list();
     if (res.success && res.data) {
       setBookmarks(res.data);
+    }
+  }, [api]);
+
+  // Feature 3: categories visible for the current site (global + this site's
+  // private ones). Reloaded whenever the site changes.
+  const loadCategories = useCallback(async (domain?: string | null) => {
+    const res = await api.categories.list(domain || undefined);
+    if (res.success && res.data) {
+      setCategories(res.data);
+      // If the active category is no longer visible (e.g. site changed), reset.
+      setActiveCategoryId(prev => (prev && res.data!.some(c => c.id === prev)) ? prev : null);
     }
   }, [api]);
 
@@ -129,7 +193,8 @@ export default function App() {
   // site/domain changes so the sidebar only shows accounts for this site.
   useEffect(() => {
     loadLoginEntries(currentDomain);
-  }, [currentDomain, loadLoginEntries]);
+    loadCategories(currentDomain);
+  }, [currentDomain, loadLoginEntries, loadCategories]);
 
   // Reload domain statuses when login entries or current domain changes
   useEffect(() => {
@@ -491,6 +556,70 @@ export default function App() {
     }
   }, [entryToDelete, api, loadLoginEntries, currentDomain]);
 
+  // ---- Category handlers (Feature 3) ----
+
+  const handleOpenCreateCategory = useCallback(() => {
+    setEditingCategory(null);
+    setCategoryModalOpen(true);
+    api.tabs.setOverlay(true);
+  }, [api]);
+
+  const handleOpenEditCategory = useCallback((category: Category) => {
+    setEditingCategory(category);
+    setCategoryModalOpen(true);
+    api.tabs.setOverlay(true);
+  }, [api]);
+
+  const handleCloseCategoryModal = useCallback(() => {
+    setCategoryModalOpen(false);
+    setEditingCategory(null);
+    api.tabs.setOverlay(false);
+  }, [api]);
+
+  const handleSaveCategory = useCallback(async (draft: {
+    name: string; icon: string; scope: 'global' | 'private'; accountIds: string[];
+  }) => {
+    if (editingCategory) {
+      await api.categories.update({
+        id: editingCategory.id,
+        name: draft.name,
+        icon: draft.icon,
+        scope: draft.scope,
+        domain: draft.scope === 'private' ? (currentDomain || undefined) : undefined,
+        accountIds: draft.accountIds,
+      });
+    } else {
+      await api.categories.create({
+        name: draft.name,
+        icon: draft.icon,
+        scope: draft.scope,
+        domain: draft.scope === 'private' ? (currentDomain || undefined) : undefined,
+        accountIds: draft.accountIds,
+      });
+    }
+    setCategoryModalOpen(false);
+    setEditingCategory(null);
+    api.tabs.setOverlay(false);
+    loadCategories(currentDomain);
+  }, [editingCategory, api, currentDomain, loadCategories]);
+
+  const handleDeleteCategory = useCallback(async (category: Category) => {
+    const res = await api.categories.delete(category.id);
+    if (res.success) {
+      if (activeCategoryId === category.id) setActiveCategoryId(null);
+      loadCategories(currentDomain);
+    }
+  }, [api, activeCategoryId, currentDomain, loadCategories]);
+
+  // Filter the sidebar entries by the active category (null = show all).
+  const visibleStatuses = React.useMemo(() => {
+    if (!activeCategoryId) return domainStatuses;
+    const cat = categories.find(c => c.id === activeCategoryId);
+    if (!cat) return domainStatuses;
+    const idSet = new Set(cat.accountIds);
+    return domainStatuses.filter(s => idSet.has(s.entry.id));
+  }, [activeCategoryId, categories, domainStatuses]);
+
   // ---- Render ----
 
   return (
@@ -515,6 +644,8 @@ export default function App() {
           onRefresh={handleRefresh}
           onAddBookmark={handleAddBookmark}
           isBookmarked={isCurrentBookmarked}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
         />
 
         {/* Bookmarks bar */}
@@ -536,11 +667,19 @@ export default function App() {
       {/* Content: Sidebar + Browser */}
       <div className="content-area">
         <Sidebar
-          entries={domainStatuses}
+          entries={visibleStatuses}
           currentDomain={currentDomain}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={handleToggleSidebar}
           onSelectEntry={handleSelectLoginEntry}
           onAddEntry={handleOpenAddEntryModal}
           onDeleteEntry={handleRequestDeleteEntry}
+          categories={categories}
+          activeCategoryId={activeCategoryId}
+          onSelectCategory={setActiveCategoryId}
+          onAddCategory={handleOpenCreateCategory}
+          onEditCategory={handleOpenEditCategory}
+          onDeleteCategory={handleDeleteCategory}
         />
 
         <div className="browser-area" ref={contentRef}>
@@ -639,6 +778,17 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Category Create / Edit Modal (Feature 3) */}
+      {categoryModalOpen && (
+        <CategoryModal
+          editing={editingCategory}
+          accounts={loginEntries}
+          currentDomain={currentDomain}
+          onCancel={handleCloseCategoryModal}
+          onSave={handleSaveCategory}
+        />
       )}
     </div>
   );

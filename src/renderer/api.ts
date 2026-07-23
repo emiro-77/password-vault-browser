@@ -12,7 +12,7 @@
 // with clear placeholder content, per the MVP requirement.
 
 import { PvbAPI } from './types.d';
-import { LoginEntry, Bookmark, TabInfo, IpcResponse, SiteLoginStatus } from '../shared/types';
+import { LoginEntry, Bookmark, TabInfo, IpcResponse, SiteLoginStatus, Category } from '../shared/types';
 
 const now = () => new Date().toISOString();
 
@@ -40,6 +40,7 @@ function ok<T>(data: T): Promise<IpcResponse<T>> {
 function createMockApi(): PvbAPI & { __isMock: true } {
   let tabs: TabInfo[] = [];
   let counter = 0;
+  let mockCategories: Category[] = [];
 
   const makeTab = (): TabInfo => {
     counter += 1;
@@ -72,6 +73,45 @@ function createMockApi(): PvbAPI & { __isMock: true } {
       list: () => ok(MOCK_BOOKMARKS),
       create: (data) => ok({ id: `bm-${Date.now()}`, title: data.title, url: data.url, position: 99, createdAt: now() }),
       delete: () => ok(undefined),
+      reorder: () => ok(undefined),
+    },
+
+    categories: {
+      list: (domain) => ok(
+        mockCategories.filter(c => c.scope === 'global' || (!!domain && c.domain === domain))
+      ),
+      create: (data) => {
+        const cat: Category = {
+          id: `cat-${Date.now()}`,
+          name: data.name,
+          icon: data.icon || '📁',
+          scope: data.scope,
+          domain: data.scope === 'private' ? (data.domain || '') : '',
+          position: mockCategories.length,
+          accountIds: data.accountIds || [],
+          createdAt: now(),
+          updatedAt: now(),
+        };
+        mockCategories.push(cat);
+        return ok(cat);
+      },
+      update: (data) => {
+        const cat = mockCategories.find(c => c.id === data.id);
+        if (!cat) return Promise.resolve({ success: false, error: 'not found' });
+        Object.assign(cat, {
+          name: data.name ?? cat.name,
+          icon: data.icon ?? cat.icon,
+          scope: data.scope ?? cat.scope,
+          domain: data.domain ?? cat.domain,
+          accountIds: data.accountIds ?? cat.accountIds,
+          updatedAt: now(),
+        });
+        return ok(cat);
+      },
+      delete: (id) => {
+        mockCategories = mockCategories.filter(c => c.id !== id);
+        return ok(undefined);
+      },
       reorder: () => ok(undefined),
     },
 
@@ -111,6 +151,8 @@ function createMockApi(): PvbAPI & { __isMock: true } {
     },
 
     sendChromeHeight: () => { /* no-op in mock mode */ },
+    sendTheme: () => { /* no-op in mock mode */ },
+    sendSidebarWidth: () => { /* no-op in mock mode */ },
 
     on: () => () => { /* no events in mock mode */ },
   };

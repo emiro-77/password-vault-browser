@@ -36,6 +36,9 @@ export class TabManager {
   private window: BrowserWindow | null = null;
   /** Last chrome height reported by the renderer; used to position views. */
   private chromeHeight: number = DEFAULT_CHROME_HEIGHT;
+  /** Last sidebar width reported by the renderer; used to position views.
+   *  Falls back to the SIDEBAR_WIDTH constant until the renderer reports one. */
+  private sidebarWidth: number = SIDEBAR_WIDTH;
   /** When true, the active web view is detached so a shell modal/overlay in the
    *  renderer can receive focus & clicks (a BrowserView always renders above the
    *  shell HTML, so it must be removed, not just z-index'd). */
@@ -212,7 +215,7 @@ export class TabManager {
     if (!this.window) return;
     // getContentBounds excludes the OS window frame/titlebar.
     const bounds = this.window.getContentBounds();
-    view.setBounds(computeViewBounds(bounds.width, bounds.height, SIDEBAR_WIDTH, this.chromeHeight));
+    view.setBounds(computeViewBounds(bounds.width, bounds.height, this.sidebarWidth, this.chromeHeight));
     // Auto-resize so the view follows window resizes between explicit updates.
     view.setAutoResize({ width: true, height: true });
   }
@@ -225,6 +228,23 @@ export class TabManager {
   updateActiveViewBounds(chromeHeight: number): void {
     if (chromeHeight && chromeHeight > 0) {
       this.chromeHeight = chromeHeight;
+    }
+    if (!this.activeTabId || !this.window) return;
+
+    const entry = this.tabs.get(this.activeTabId);
+    if (!entry?.view) return;
+
+    this.applyBounds(entry.view);
+  }
+
+  /**
+   * Update the sidebar width used to position the active web view. Called when
+   * the renderer collapses/expands the vault sidebar so the BrowserView follows
+   * the shell layout instead of leaving a gap or overlapping.
+   */
+  updateSidebarWidth(sidebarWidth: number): void {
+    if (typeof sidebarWidth === 'number' && sidebarWidth >= 0) {
+      this.sidebarWidth = sidebarWidth;
     }
     if (!this.activeTabId || !this.window) return;
 

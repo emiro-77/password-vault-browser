@@ -3,6 +3,7 @@
 // ============================================================================
 
 import React, { useState, useRef, useEffect } from 'react';
+import ThemeToggle, { Theme } from './ThemeToggle';
 
 interface AddressBarProps {
   url: string;
@@ -16,6 +17,8 @@ interface AddressBarProps {
   onRefresh: () => void;
   onAddBookmark: () => void;
   isBookmarked?: boolean;
+  theme: Theme;
+  onToggleTheme: () => void;
 }
 
 export default function AddressBar({
@@ -30,6 +33,8 @@ export default function AddressBar({
   onRefresh,
   onAddBookmark,
   isBookmarked = false,
+  theme,
+  onToggleTheme,
 }: AddressBarProps) {
   const [inputValue, setInputValue] = useState(url);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -102,15 +107,7 @@ export default function AddressBar({
       />
 
       {/* Page title indicator */}
-      <span style={{
-        fontSize: 11,
-        color: 'var(--text-muted)',
-        maxWidth: 150,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        flexShrink: 0,
-      }}>
+      <span className="page-title-indicator">
         {title}
       </span>
 
@@ -123,6 +120,12 @@ export default function AddressBar({
       >
         {isBookmarked ? '★' : '☆'}
       </button>
+
+      {/* App name */}
+      <span className="app-name" title="Password Vault Browser">Vault Browser</span>
+
+      {/* Light / Night theme toggle */}
+      <ThemeToggle theme={theme} onToggle={onToggleTheme} />
     </div>
   );
 }

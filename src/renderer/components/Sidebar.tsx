@@ -1,11 +1,15 @@
 // ============================================================================
 // Sidebar Component
 // ============================================================================
-// Shows all global login entries with their status for the current domain.
-// Users can click on an entry to autofill on the current tab.
+// Shows the login entries for the current site with their per-site status.
+// Supports:
+//   - expanded / minimized (collapsed) modes
+//   - a category bar at the bottom (add / select / right-click edit-delete)
+//     with horizontal drag-scroll for overflow
+//   - filtering the visible accounts by the active category
 
-import React, { useState } from 'react';
-import { LoginStatus } from '../../shared/types';
+import React, { useRef, useState, useCallback } from 'react';
+import { LoginStatus, Category } from '../../shared/types';
 
 interface EntryWithStatus {
   entry: { id: string; label: string; usernameOrEmail: string };
@@ -22,12 +26,38 @@ interface EntryWithStatus {
 interface SidebarProps {
   entries: EntryWithStatus[];
   currentDomain: string | null;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onSelectEntry: (loginEntryId: string) => void;
   onAddEntry: () => void;
   onDeleteEntry: (loginEntryId: string) => void;
+
+  // Categories
+  categories: Category[];
+  activeCategoryId: string | null;
+  onSelectCategory: (categoryId: string | null) => void;
+  onAddCategory: () => void;
+  onEditCategory: (category: Category) => void;
+  onDeleteCategory: (category: Category) => void;
 }
 
-export default function Sidebar({ entries, currentDomain, onSelectEntry, onAddEntry, onDeleteEntry }: SidebarProps) {
+const ACTIVE_STATUSES: LoginStatus[] = ['logged_in', 'active_tab_open'];
+
+export default function Sidebar({
+  entries,
+  currentDomain,
+  collapsed,
+  onToggleCollapse,
+  onSelectEntry,
+  onAddEntry,
+  onDeleteEntry,
+  categories,
+  activeCategoryId,
+  onSelectCategory,
+  onAddCategory,
+  onEditCategory,
+  onDeleteCategory,
+}: SidebarProps) {
   const formatStatusLabel = (status: LoginStatus | null): string => {
     switch (status) {
       case 'logged_in': return 'Logged in';
@@ -43,71 +73,126 @@ export default function Sidebar({ entries, currentDomain, onSelectEntry, onAddEn
   const formatTimeRemaining = (statusInfo: EntryWithStatus['statusInfo']): string | null => {
     if (!statusInfo?.loggedInUntil) return null;
     const until = new Date(statusInfo.loggedInUntil).getTime();
-    const now = Date.now();
-    const remaining = until - now;
-
+    const remaining = until - Date.now();
     if (remaining <= 0) return 'Expired';
-
     const hours = Math.floor(remaining / (1000 * 60 * 60));
     const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-
     if (hours > 0) return `${hours}h ${minutes}m remaining`;
     if (minutes > 0) return `${minutes}m remaining`;
     return '< 1m';
   };
 
+  const isActive = (status: LoginStatus | null) => !!status && ACTIVE_STATUSES.includes(status);
+
+  // ---- Category context menu ----
+  const [menu, setMenu] = useState<{ x: number; y: number; category: Category } | null>(null);
+
+  const openMenu = (e: React.MouseEvent, category: Category) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ x: e.clientX, y: e.clientY, category });
+  };
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  // ---- Horizontal drag-scroll for the category bar overflow ----
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ startX: number; startScroll: number; dragging: boolean }>({
+    startX: 0, startScroll: 0, dragging: false,
+  });
+
+  const onScrollerMouseDown = (e: React.MouseEvent) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    drag.current = { startX: e.clientX, startScroll: el.scrollLeft, dragging: true };
+  };
+  const onScrollerMouseMove = (e: React.MouseEvent) => {
+    const el = scrollerRef.current;
+    if (!el || !drag.current.dragging) return;
+    el.scrollLeft = drag.current.startScroll - (e.clientX - drag.current.startX);
+  };
+  const endDrag = () => { drag.current.dragging = false; };
+  const onScrollerWheel = (e: React.WheelEvent) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollLeft += e.deltaY;
+  };
+
   return (
-    <div className="sidebar">
+    <div
+      className={`sidebar${collapsed ? ' collapsed' : ''}`}
+      onClick={closeMenu}
+    >
       {/* Header */}
       <div className="sidebar-header">
-        <span className="sidebar-title">Vault</span>
-        <button className="sidebar-add-btn" onClick={onAddEntry} title="Add login entry">
-          +
-        </button>
-      </div>
-
-      {/* Current domain indicator */}
-      <div className="sidebar-domain-info">
-        <div className="sidebar-domain-label">Current Site</div>
-        <div className="sidebar-domain-value">
-          {currentDomain ? (
-            <span className="truncate" style={{ display: 'block' }}>{currentDomain}</span>
-          ) : (
-            <span style={{ color: 'var(--text-muted)' }}>No page loaded</span>
+        {!collapsed && <span className="sidebar-title">Vault</span>}
+        <div className="sidebar-header-actions">
+          {!collapsed && (
+            <button className="sidebar-add-btn" onClick={onAddEntry} title="Add login entry">
+              +
+            </button>
           )}
+          <button
+            className="sidebar-collapse-btn"
+            onClick={onToggleCollapse}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? '»' : '«'}
+          </button>
         </div>
       </div>
+
+      {/* Current domain indicator (expanded only) */}
+      {!collapsed && (
+        <div className="sidebar-domain-info">
+          <div className="sidebar-domain-label">Current Site</div>
+          <div className="sidebar-domain-value">
+            {currentDomain ? (
+              <span className="truncate" style={{ display: 'block' }}>{currentDomain}</span>
+            ) : (
+              <span style={{ color: 'var(--text-muted)' }}>No page loaded</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Login entries */}
       <div className="sidebar-entries">
         {entries.length === 0 ? (
-          <div style={{
-            padding: '24px 12px',
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-            fontSize: 13,
-          }}>
-            <p>No saved logins yet.</p>
-            <p style={{ marginTop: 8 }}>
+          collapsed ? null : (
+            <div className="sidebar-empty">
+              <p>No saved logins {activeCategoryId ? 'in this category' : 'yet'}.</p>
+              <p style={{ marginTop: 8 }}>
+                <button
+                  className="modal-btn primary"
+                  onClick={onAddEntry}
+                  style={{ fontSize: 12, padding: '4px 12px' }}
+                >
+                  + Add Login
+                </button>
+              </p>
+            </div>
+          )
+        ) : collapsed ? (
+          // ---- Minimized mode: only labels. Active = green, others = white.
+          //      Used-but-inactive labels are hidden (per spec). ----
+          entries
+            .filter(({ status }) => isActive(status) || status === 'never_used' || status === null)
+            .map(({ entry, status }) => (
               <button
-                className="modal-btn primary"
-                onClick={onAddEntry}
-                style={{ fontSize: 12, padding: '4px 12px' }}
-              >
-                + Add Login
-              </button>
-            </p>
-          </div>
-        ) : (
-          entries.map(({ entry, status, statusInfo }) => {
-            const badgeClass = status || 'never_used';
-
-            return (
-              <div
                 key={entry.id}
-                className="entry-item"
+                className={`entry-mini${isActive(status) ? ' active' : ''}`}
+                title={entry.label}
                 onClick={() => onSelectEntry(entry.id)}
               >
+                {entry.label}
+              </button>
+            ))
+        ) : (
+          // ---- Expanded mode: full details ----
+          entries.map(({ entry, status, statusInfo }) => {
+            const badgeClass = status || 'never_used';
+            return (
+              <div key={entry.id} className="entry-item" onClick={() => onSelectEntry(entry.id)}>
                 <div className="entry-item-header">
                   <span className="entry-label truncate">{entry.label}</span>
                   <span className={`status-badge ${badgeClass}`}>
@@ -116,38 +201,22 @@ export default function Sidebar({ entries, currentDomain, onSelectEntry, onAddEn
                   <button
                     className="entry-delete-btn"
                     title="Delete account"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteEntry(entry.id);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); onDeleteEntry(entry.id); }}
                   >
                     ✕
                   </button>
                 </div>
 
-                <div className="entry-username truncate">
-                  {entry.usernameOrEmail}
-                </div>
+                <div className="entry-username truncate">{entry.usernameOrEmail}</div>
 
-                {/* Time remaining for logged_in status */}
                 {status === 'logged_in' && statusInfo && (
-                  <div style={{
-                    fontSize: 10,
-                    color: 'var(--text-muted)',
-                    marginTop: 2,
-                  }}>
-                    {formatTimeRemaining(statusInfo)}
-                  </div>
+                  <div className="entry-time-remaining">{formatTimeRemaining(statusInfo)}</div>
                 )}
 
-                {/* Actions */}
                 <div className="entry-actions">
                   <button
                     className="entry-action-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectEntry(entry.id);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); onSelectEntry(entry.id); }}
                   >
                     {currentDomain ? 'Use on this site' : 'Select'}
                   </button>
@@ -157,6 +226,68 @@ export default function Sidebar({ entries, currentDomain, onSelectEntry, onAddEn
           })
         )}
       </div>
+
+      {/* ---- Category bar (bottom) ---- */}
+      {!collapsed && (
+        <div className="category-bar">
+          <div
+            className="category-scroller"
+            ref={scrollerRef}
+            onMouseDown={onScrollerMouseDown}
+            onMouseMove={onScrollerMouseMove}
+            onMouseUp={endDrag}
+            onMouseLeave={endDrag}
+            onWheel={onScrollerWheel}
+          >
+            <button
+              className={`category-chip${activeCategoryId === null ? ' active' : ''}`}
+              onClick={() => onSelectCategory(null)}
+              title="All accounts"
+            >
+              <span className="category-chip-icon">🗂️</span>
+              <span className="category-chip-name">All</span>
+            </button>
+
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                className={`category-chip${activeCategoryId === cat.id ? ' active' : ''}`}
+                onClick={() => onSelectCategory(cat.id)}
+                onContextMenu={(e) => openMenu(e, cat)}
+                title={`${cat.name}${cat.scope === 'private' ? ' (private)' : ''}`}
+              >
+                <span className="category-chip-icon">
+                  {cat.icon.startsWith('data:')
+                    ? <img src={cat.icon} alt="" className="category-chip-img" />
+                    : cat.icon}
+                </span>
+                <span className="category-chip-name">{cat.name}</span>
+                {cat.scope === 'private' && <span className="category-chip-lock">🔒</span>}
+              </button>
+            ))}
+          </div>
+
+          <button className="category-add-btn" onClick={onAddCategory} title="New category">
+            📁＋
+          </button>
+        </div>
+      )}
+
+      {/* ---- Category context menu ---- */}
+      {menu && (
+        <div
+          className="category-context-menu"
+          style={{ left: menu.x, top: menu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button onClick={() => { onEditCategory(menu.category); closeMenu(); }}>
+            ✏️ Edit category
+          </button>
+          <button className="danger" onClick={() => { onDeleteCategory(menu.category); closeMenu(); }}>
+            🗑️ Delete category
+          </button>
+        </div>
+      )}
     </div>
   );
 }

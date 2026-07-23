@@ -56,6 +56,39 @@ export interface SiteLoginStatus {
   activeTabId: string | null;
 }
 
+// ---- Categories / Folders ----
+
+export type CategoryScope = 'global' | 'private';
+
+export interface Category {
+  id: string;
+  name: string;
+  icon: string;               // emoji/glyph or data: URL for a custom icon
+  scope: CategoryScope;
+  domain: string;             // '' for global; site host for private
+  position: number;
+  accountIds: string[];       // login entry ids that belong to this category
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CategoryCreateRequest {
+  name: string;
+  icon?: string;
+  scope: CategoryScope;
+  domain?: string;            // required (site host) when scope === 'private'
+  accountIds?: string[];
+}
+
+export interface CategoryUpdateRequest {
+  id: string;
+  name?: string;
+  icon?: string;
+  scope?: CategoryScope;
+  domain?: string;
+  accountIds?: string[];
+}
+
 // ---- Bookmark ----
 
 export interface Bookmark {
@@ -111,6 +144,13 @@ export const IPC_CHANNELS = {
   BOOKMARKS_CREATE:       'bookmarks:create',
   BOOKMARKS_DELETE:       'bookmarks:delete',
   BOOKMARKS_REORDER:      'bookmarks:reorder',
+
+  // Categories / folders
+  CATEGORIES_LIST:        'categories:list',
+  CATEGORIES_CREATE:      'categories:create',
+  CATEGORIES_UPDATE:      'categories:update',
+  CATEGORIES_DELETE:      'categories:delete',
+  CATEGORIES_REORDER:     'categories:reorder',
 
   // Site Status
   STATUS_GET_FOR_DOMAIN:  'status:get-for-domain',

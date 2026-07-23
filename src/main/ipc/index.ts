@@ -4,6 +4,7 @@
 
 import { registerCredentialsIpc } from './credentials.ipc';
 import { registerBookmarksIpc } from './bookmarks.ipc';
+import { registerCategoriesIpc } from './categories.ipc';
 import { registerStatusIpc } from './status.ipc';
 import { registerTabsIpc } from './tabs.ipc';
 import { registerAutofillIpc } from './autofill.ipc';
@@ -18,6 +19,7 @@ export function registerAllIpcHandlers(): void {
 
   registerCredentialsIpc();
   registerBookmarksIpc();
+  registerCategoriesIpc();
   registerStatusIpc();
   registerTabsIpc();
   registerAutofillIpc();

@@ -22,6 +22,32 @@ CREATE TABLE IF NOT EXISTS login_entries (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_login_entries_domain_user
   ON login_entries(domain, username_or_email);
 
+-- Account categories / folders.
+--   scope = 'global'  -> usable on every site (domain = '')
+--   scope = 'private' -> unique to one website (domain = that site)
+-- icon holds either a short emoji/glyph or a data: URL for a custom upload.
+CREATE TABLE IF NOT EXISTS categories (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  icon        TEXT NOT NULL DEFAULT '📁',
+  scope       TEXT NOT NULL DEFAULT 'global'
+                CHECK (scope IN ('global','private')),
+  domain      TEXT NOT NULL DEFAULT '',   -- '' for global, site host for private
+  position    INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+-- Many-to-many: an account can live in multiple categories.
+CREATE TABLE IF NOT EXISTS category_accounts (
+  category_id     TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  login_entry_id  TEXT NOT NULL REFERENCES login_entries(id) ON DELETE CASCADE,
+  PRIMARY KEY (category_id, login_entry_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_categories_domain ON categories(domain);
+CREATE INDEX IF NOT EXISTS idx_category_accounts_login ON category_accounts(login_entry_id);
+
 -- Bookmarks (flat list for MVP)
 CREATE TABLE IF NOT EXISTS bookmarks (
   id         TEXT PRIMARY KEY,

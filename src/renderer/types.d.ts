@@ -2,7 +2,7 @@
 // Type declarations for the renderer's window.pvbAPI
 // ============================================================================
 
-import { IpcResponse, LoginEntry, Bookmark, SiteLoginStatus, TabInfo } from '../shared/types';
+import { IpcResponse, LoginEntry, Bookmark, SiteLoginStatus, TabInfo, Category, CategoryCreateRequest, CategoryUpdateRequest } from '../shared/types';
 
 export interface PvbAPI {
   credentials: {
@@ -15,6 +15,14 @@ export interface PvbAPI {
   bookmarks: {
     list: () => Promise<IpcResponse<Bookmark[]>>;
     create: (data: { title: string; url: string }) => Promise<IpcResponse<Bookmark>>;
+    delete: (id: string) => Promise<IpcResponse>;
+    reorder: (orderedIds: string[]) => Promise<IpcResponse>;
+  };
+
+  categories: {
+    list: (domain?: string) => Promise<IpcResponse<Category[]>>;
+    create: (data: CategoryCreateRequest) => Promise<IpcResponse<Category>>;
+    update: (data: CategoryUpdateRequest) => Promise<IpcResponse<Category>>;
     delete: (id: string) => Promise<IpcResponse>;
     reorder: (orderedIds: string[]) => Promise<IpcResponse>;
   };
@@ -42,6 +50,8 @@ export interface PvbAPI {
   };
 
   sendChromeHeight: (height: number) => void;
+  sendTheme: (theme: 'light' | 'dark') => void;
+  sendSidebarWidth: (width: number) => void;
 
   on: (channel: string, callback: (...args: any[]) => void) => () => void;
 }

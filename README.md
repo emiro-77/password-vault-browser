@@ -11,10 +11,15 @@ site (domain), and per-site login *status* is tracked for each site.
 - **Preload** (`src/preload`) — exposes a typed, sandboxed `window.pvbAPI` via
   `contextBridge`.
 - **Renderer** (`src/renderer`) — React browser shell UI:
-  - `components/AddressBar.tsx` — back / forward / refresh / URL input / new tab
+  - `components/AddressBar.tsx` — back / forward / refresh / URL input / new tab,
+    app name, bookmark star, and the **light/night theme toggle**
+  - `components/ThemeToggle.tsx` — sun/moon button that flips the whole UI theme
   - `components/BookmarksBar.tsx` — bookmarks bar
   - `components/Sidebar.tsx` — saved login entries (label, username/email,
-    per-site status badge, per-entry delete button with confirm modal)
+    per-site status badge, per-entry delete button with confirm modal), a
+    **collapse/minimize arrow**, and a **category bar** (create/select/edit/delete)
+  - `components/CategoryModal.tsx` — create/edit a category (name, icon picker +
+    custom upload, Global/Private scope, account checklist)
   - `components/TabStrip.tsx` — visible, switchable tabs + new-tab button
   - `App.tsx` — composes the shell and coordinates tabs/navigation via IPC
 
@@ -97,6 +102,53 @@ If no tab is open when you navigate, a guest tab is created automatically.
   new login tab) the main process emits `event:status-changed`; the renderer
   refreshes the sidebar for the current domain automatically.
 
+## Theme, sidebar collapse & categories (v0.4.0)
+
+### Light / Night theme toggle (Feature 1)
+
+- Night mode is the default. The theme toggle (☀️/🌙) lives in the address bar's
+  right-hand cluster, next to the app name and bookmark star.
+- The whole shell UI is driven by CSS custom properties on `:root`; a
+  `:root[data-theme="light"]` override block flips every color. `App.tsx` sets
+  `document.documentElement.setAttribute('data-theme', theme)` and persists the
+  choice in `localStorage` (`pvb-theme`).
+- Loaded **websites** follow the theme best-effort: the renderer sends
+  `browser:set-theme`, and the main process sets `nativeTheme.themeSource` so
+  sites honoring `prefers-color-scheme` render light/dark accordingly.
+
+### Vault sidebar collapse / minimize (Feature 2)
+
+- An arrow button to the right of the `+` collapses/expands the sidebar
+  (persisted in `localStorage` as `pvb-sidebar-collapsed`).
+- **Minimized mode** shows only account labels: the **active** account is green,
+  other visible accounts are white, and used-but-inactive accounts are hidden.
+  Full details (status badge, time remaining, actions) show only when expanded.
+- Collapsing narrows the sidebar (280px → 120px). The renderer reports the width
+  via `browser:sidebar-width`; the main process (`tabManager.updateSidebarWidth`)
+  repositions the active `BrowserView` so the page follows the layout.
+
+### Categories / folders (Feature 3)
+
+- A category bar sits at the **bottom** of the sidebar with an "All" chip, one
+  chip per category, and a **new-category** button (`📁＋`) on the right.
+- Overflowing chips can be revealed by **dragging** (hold left-click) or
+  wheel-scrolling the strip horizontally.
+- **Right-click** a category chip for **Edit** / **Delete**.
+- The create/edit modal (rendered above the page via `tabs.setOverlay`) takes a
+  name, an icon (12 basic emojis or a custom uploaded image < 256 KB, stored as a
+  `data:` URL), a **Global/Private** scope, and a checklist of accounts. One
+  account can belong to multiple categories.
+- **Global** categories appear on **all** sites; **Private** categories are tied
+  to the site they were created on (`domain`), so a private category made on
+  `chatgpt.com` does **not** show on `claude.ai`. Per-site login *status* stays
+  keyed by `(loginEntryId, domain)`, so "logged in within 24h" remains
+  session/site-specific even for global categories.
+- Data model: a `categories` table (`id, name, icon, scope, domain, position,
+  timestamps`) plus a `category_accounts` many-to-many join table
+  (`ON DELETE CASCADE`). Both are `CREATE TABLE IF NOT EXISTS`, so they
+  auto-create on next launch — no manual migration. Managed by
+  `src/main/services/category-manager.ts` over the `categories:*` IPC channels.
+
 ## Testing & CI
 
 Unit tests live in `tests/` and run with `tsx`:
@@ -175,6 +227,13 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   the active and background tabs, instead of always "New Tab" (v0.3.3)
 - ✅ Each account in the sidebar has a delete (✕) button with a confirmation
   modal before removal (v0.3.3)
+- ✅ Light / Night theme toggle for the whole shell UI + best-effort website
+  theming via `nativeTheme.themeSource` (v0.4.0)
+- ✅ Vault sidebar collapse/minimize: label-only view (active=green, others=white,
+  inactive hidden) and the BrowserView follows the narrowed sidebar (v0.4.0)
+- ✅ Categories/folders: bottom category bar with drag-scroll overflow,
+  right-click edit/delete, create/edit modal (icon picker + custom upload,
+  account checklist), and Global vs Private (site-specific) scope (v0.4.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

@@ -49,6 +49,34 @@
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
+/* ---- Light Mode theme overrides ----
+   Night mode is the default (the :root values above). Setting
+   data-theme="light" on <html> flips the whole UI to light mode. */
+:root[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f2f3f5;
+  --bg-surface: #e9eaee;
+  --bg-hover: #dcdee3;
+  --bg-active: #cbced6;
+
+  --text-primary: #1e1e2e;
+  --text-secondary: #4c4f5a;
+  --text-muted: #7c7f8a;
+
+  --accent: #1a73e8;
+  --accent-hover: #1557b0;
+  --success: #1e8e3e;
+  --warning: #b06000;
+  --error: #d93025;
+  --info: #1a73e8;
+
+  --border: #d3d5db;
+  --border-focus: #1a73e8;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
 html, body {
   width: 100%;
   height: 100%;
@@ -168,6 +196,48 @@ html, body {
 
 .url-input::placeholder {
   color: var(--text-muted);
+}
+
+/* ---- Top-bar right section: page title, app name, theme toggle ---- */
+
+.page-title-indicator {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.app-name {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 15px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-focus);
 }
 
 .new-tab-btn {
@@ -764,4 +834,357 @@ html, body {
   color: #1e1e2e;
   background: #f5c542;
   border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================================================
+   Feature 2 — Sidebar collapse / minimized mode
+   ============================================================================ */
+
+.sidebar.collapsed {
+  width: 120px;
+  min-width: 120px;
+}
+
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-collapse-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
+.entry-mini {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ffffff;
+  transition: background 0.15s;
+}
+
+.entry-mini:hover {
+  background: var(--bg-hover);
+}
+
+.entry-mini.active {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.entry-time-remaining {
+  font-size: var(--font-size-sm);
+  color: var(--success);
+  margin-top: 2px;
+}
+
+.sidebar-empty {
+  padding: 16px 12px;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ============================================================================
+   Feature 3 — Category bar (bottom of sidebar)
+   ============================================================================ */
+
+.category-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.category-scroller {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.category-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.category-scroller:active {
+  cursor: grabbing;
+}
+
+.category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-width: 140px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.category-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.category-chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.category-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.category-chip-img {
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+.category-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.category-chip-lock {
+  font-size: 10px;
+}
+
+.category-add-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.category-add-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.category-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.category-context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.category-context-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.category-context-menu button.danger {
+  color: #f38ba8;
+}
+
+.category-context-menu button.danger:hover {
+  background: rgba(243, 139, 168, 0.15);
+}
+
+/* ============================================================================
+   Feature 3 — Category create / edit modal
+   ============================================================================ */
+
+.category-modal {
+  width: 440px;
+  max-width: 92vw;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.scope-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scope-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.scope-option:hover {
+  background: var(--bg-hover);
+}
+
+.scope-option.selected {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.scope-option code {
+  color: var(--accent);
+}
+
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.icon-choice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.icon-choice:hover {
+  background: var(--bg-hover);
+}
+
+.icon-choice.selected {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.icon-choice.upload {
+  color: var(--text-secondary);
+  overflow: hidden;
+}
+
+.icon-custom-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.account-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  background: var(--bg-primary);
+}
+
+.account-checklist-empty {
+  padding: 12px;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.account-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.account-check:hover {
+  background: var(--bg-hover);
+}
+
+.account-check-label {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.account-check-user {
+  color: var(--text-muted);
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
 }
