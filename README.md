@@ -279,6 +279,49 @@ and `settings:clear-account-timer` (`SETTINGS_CLEAR_ACCOUNT_TIMER`), kept in
 sync between `src/shared/types.ts` and `src/preload/index.ts` by
 `tests/ipc-channels-sync.test.ts`.
 
+## Encrypted data export / import (v0.9.0)
+
+The **Data management** section now has **Data export** and **Data import**
+buttons to the right of *Clear selected data*, for moving your whole vault
+between devices.
+
+### Portable, encrypted `.vaultbackup` format
+
+The chosen backup format is a **single passphrase-encrypted JSON file**
+(`*.vaultbackup`). This was picked specifically so the backup works **globally
+across future Android, iOS, macOS and Linux versions and any other Windows
+device**:
+
+- **JSON envelope** — the file is plain JSON, parseable by every language and
+  runtime. We deliberately do **not** ship the raw SQLite file or the Windows
+  Credential Manager entries, because those are OS-bound and not portable.
+- **Standard crypto** — the payload is encrypted with **AES-256-GCM** using a
+  key derived from the user's passphrase via **PBKDF2-SHA256 (210 000
+  iterations)**. Both primitives exist in every platform's standard crypto
+  library, so a mobile/other-OS client can read and write the same file without
+  this codebase. The envelope is self-describing (KDF params, salt, IV, auth
+  tag, format version) for forward compatibility.
+- **Passwords travel inside the encrypted payload** — a new device has an empty
+  credential store, so the export must include the plaintext passwords; that is
+  exactly why the whole file is encrypted with the passphrase and never written
+  in the clear. The username/password never appear in the file bytes (verified
+  by `tests/vault-transfer-crypto.test.ts`).
+
+**Export** (`buildEncryptedExport` in `src/main/services/vault-transfer.ts`):
+collects `login_entries` + their passwords + categories, bookmarks,
+`site_login_status` and `site_rules`, encrypts them, and writes the file via a
+native Save dialog (defaulting to `~/Documents/vault-browser-backup-<date>.vaultbackup`).
+
+**Import** (`importEncryptedBackup`): after a native Open dialog, decrypts with
+the passphrase (a wrong passphrase or tampered file is rejected by the GCM auth
+tag) and then **wipes the current vault and overwrites it** with the backup's
+contents — "the previous database vanishes", exactly as requested. Old
+credential-store secrets are deleted first so nothing is orphaned. The UI warns
+that import replaces all existing data.
+
+New IPC channels: `settings:export-data` (`SETTINGS_EXPORT_DATA`) and
+`settings:import-data` (`SETTINGS_IMPORT_DATA`).
+
 ## Testing & CI
 
 Unit tests live in `tests/` and run with `tsx`:
@@ -383,6 +426,9 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
 - ✅ Per-account edit (label / username / password / status) and delete from the
   Settings tab, with active-tab status locked and a status-change/timer-clear
   warning (v0.8.0)
+- ✅ Encrypted, cross-platform data **export**/**import** (passphrase-protected
+  `.vaultbackup` JSON, AES-256-GCM + PBKDF2); import wipes and overwrites the
+  current vault (v0.9.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

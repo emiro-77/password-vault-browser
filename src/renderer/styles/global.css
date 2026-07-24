@@ -1567,3 +1567,31 @@ html, body {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
+
+/* Row that keeps "Clear selected data" on the left and Export/Import on the right. */
+.data-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.data-transfer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.data-transfer-hint {
+  margin-top: 14px;
+}
+
+.data-transfer-hint code {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+  font-size: 0.9em;
+}

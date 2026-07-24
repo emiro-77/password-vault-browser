@@ -109,6 +109,10 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     }
   }, [api, clearCache, clearCookies, clearStorage]);
 
+  // ---- Data export / import (encrypted backup) ----
+  const [transferMode, setTransferMode] = useState<null | 'export' | 'import'>(null);
+  const [transferResult, setTransferResult] = useState<string | null>(null);
+
   const totalAccounts = groups.reduce((n, g) => n + g.accounts.length, 0);
 
   return (
@@ -229,16 +233,45 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 </label>
               </div>
 
-              <button
-                className="modal-btn danger"
-                onClick={handleClearData}
-                disabled={clearing || (!clearCache && !clearCookies && !clearStorage)}
-              >
-                {clearing ? 'Clearing…' : 'Clear selected data'}
-              </button>
+              <div className="data-actions-row">
+                <button
+                  className="modal-btn danger"
+                  onClick={handleClearData}
+                  disabled={clearing || (!clearCache && !clearCookies && !clearStorage)}
+                >
+                  {clearing ? 'Clearing…' : 'Clear selected data'}
+                </button>
+
+                <div className="data-transfer-actions">
+                  <button
+                    className="modal-btn"
+                    onClick={() => { setTransferResult(null); setTransferMode('export'); }}
+                  >
+                    ⬆ Data export
+                  </button>
+                  <button
+                    className="modal-btn"
+                    onClick={() => { setTransferResult(null); setTransferMode('import'); }}
+                  >
+                    ⬇ Data import
+                  </button>
+                </div>
+              </div>
+
+              <p className="settings-section-desc data-transfer-hint">
+                <strong>Export</strong> saves all your accounts (including
+                passwords) to a single passphrase-encrypted
+                <code> .vaultbackup</code> file you can move to another device.
+                <strong> Import</strong> restores such a file — it{' '}
+                <strong>replaces your current data entirely</strong> (the
+                existing vault is wiped and overwritten).
+              </p>
 
               {clearResult && (
                 <div className="clear-result" role="status">{clearResult}</div>
+              )}
+              {transferResult && (
+                <div className="clear-result" role="status">{transferResult}</div>
               )}
             </div>
           )}
@@ -251,6 +284,18 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           domain={editing.domain}
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await loadAccounts(); }}
+        />
+      )}
+
+      {transferMode && (
+        <DataTransferModal
+          mode={transferMode}
+          onClose={() => setTransferMode(null)}
+          onDone={async (msg) => {
+            setTransferMode(null);
+            setTransferResult(msg);
+            if (msg) await loadAccounts();
+          }}
         />
       )}
     </div>
@@ -412,6 +457,122 @@ function AccountEditModal({ account, domain, onClose, onSaved }: AccountEditModa
           <button className="modal-btn" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="modal-btn primary" onClick={save} disabled={saving || !label.trim() || !username.trim()}>
             {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Data transfer modal (encrypted export / import)
+// ============================================================================
+// Collects a passphrase, then triggers the native save/open dialog in the main
+// process. Export writes an encrypted `.vaultbackup` file; import decrypts a
+// chosen file and OVERWRITES the current vault.
+
+interface DataTransferModalProps {
+  mode: 'export' | 'import';
+  onClose: () => void;
+  onDone: (resultMessage: string | null) => void;
+}
+
+function DataTransferModal({ mode, onClose, onDone }: DataTransferModalProps) {
+  const api = getApi();
+  const isExport = mode === 'export';
+
+  const [passphrase, setPassphrase] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = useCallback(async () => {
+    setError(null);
+    if (!passphrase || passphrase.length < 4) {
+      setError('Enter a passphrase of at least 4 characters.');
+      return;
+    }
+    if (isExport && passphrase !== confirm) {
+      setError('The two passphrases do not match.');
+      return;
+    }
+
+    setBusy(true);
+    if (isExport) {
+      const res = await api.settings.exportData({ passphrase });
+      setBusy(false);
+      if (!res.success) { setError(res.error || 'Export failed.'); return; }
+      if (res.data?.canceled) { onClose(); return; }
+      onDone(
+        `Exported ${res.data?.accounts ?? 0} account(s) to an encrypted backup file.`
+      );
+    } else {
+      const res = await api.settings.importData({ passphrase });
+      setBusy(false);
+      if (!res.success) { setError(res.error || 'Import failed.'); return; }
+      if (res.data?.canceled) { onClose(); return; }
+      onDone(
+        `Imported ${res.data?.accounts ?? 0} account(s). Your previous data was replaced.`
+      );
+    }
+  }, [api, isExport, passphrase, confirm, onClose, onDone]);
+
+  return (
+    <div className="modal-overlay" onMouseDown={onClose}>
+      <div className="modal account-edit-modal" onMouseDown={e => e.stopPropagation()}>
+        <h3 className="modal-title">{isExport ? 'Export encrypted backup' : 'Import backup'}</h3>
+
+        {isExport ? (
+          <p className="settings-section-desc">
+            Choose a passphrase to encrypt the backup. You will need this exact
+            passphrase to import the file on another device — it cannot be
+            recovered if lost.
+          </p>
+        ) : (
+          <div className="modal-warning">
+            Importing <strong>replaces your current data entirely</strong>. All
+            accounts, categories, bookmarks and login timers in this vault will
+            be deleted and overwritten by the backup.
+          </div>
+        )}
+
+        <div className="modal-field">
+          <label className="modal-field-label">Passphrase</label>
+          <input
+            className="modal-input"
+            type="password"
+            value={passphrase}
+            autoFocus
+            onChange={e => setPassphrase(e.target.value)}
+            placeholder={isExport ? 'Create a passphrase' : 'Enter the backup passphrase'}
+          />
+        </div>
+
+        {isExport && (
+          <div className="modal-field">
+            <label className="modal-field-label">Confirm passphrase</label>
+            <input
+              className="modal-input"
+              type="password"
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              placeholder="Re-enter the passphrase"
+            />
+          </div>
+        )}
+
+        {error && <div className="modal-error" role="alert">{error}</div>}
+
+        <div className="modal-actions">
+          <button className="modal-btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button
+            className={isExport ? 'modal-btn primary' : 'modal-btn danger'}
+            onClick={run}
+            disabled={busy || !passphrase}
+          >
+            {busy
+              ? (isExport ? 'Exporting…' : 'Importing…')
+              : (isExport ? 'Choose file & export' : 'Choose file & overwrite')}
           </button>
         </div>
       </div>

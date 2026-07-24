@@ -68,6 +68,8 @@ const IPC_CHANNELS = {
   SETTINGS_CLEAR_DATA:    'settings:clear-data',
   SETTINGS_SET_ACCOUNT_STATUS: 'settings:set-account-status',
   SETTINGS_CLEAR_ACCOUNT_TIMER: 'settings:clear-account-timer',
+  SETTINGS_EXPORT_DATA:   'settings:export-data',
+  SETTINGS_IMPORT_DATA:   'settings:import-data',
 
   // Events (main -> renderer)
   EVENT_TAB_CREATED:      'event:tab-created',
@@ -163,6 +165,8 @@ const api = {
     clearData: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CLEAR_DATA, req),
     setAccountStatus: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_ACCOUNT_STATUS, req),
     clearAccountTimer: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CLEAR_ACCOUNT_TIMER, req),
+    exportData: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_EXPORT_DATA, req),
+    importData: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_IMPORT_DATA, req),
   },
 
   // ---- Event Listeners ----

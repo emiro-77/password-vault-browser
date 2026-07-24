@@ -176,6 +176,8 @@ function createMockApi(): PvbAPI & { __isMock: true } {
       clearData: () => ok({ cleared: ['cache', 'cookies', 'site storage'] }),
       setAccountStatus: () => ok(undefined),
       clearAccountTimer: () => ok(undefined),
+      exportData: () => ok({ filePath: '/mock/vault-browser-backup.vaultbackup', accounts: 3, categories: 1, bookmarks: 2 }),
+      importData: () => ok({ accounts: 3, categories: 1, bookmarks: 2 }),
     },
 
     sendChromeHeight: () => { /* no-op in mock mode */ },

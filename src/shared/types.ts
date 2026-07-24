@@ -133,6 +133,31 @@ export interface ClearDataResult {
   cleared: string[];            // human-readable list of what was cleared
 }
 
+// ---- Data export / import (encrypted, cross-platform backup) ----
+
+export interface ExportDataRequest {
+  passphrase: string;           // encrypts the backup file
+}
+
+export interface ExportDataResult {
+  canceled?: boolean;           // user dismissed the save dialog
+  filePath?: string;            // where the backup was written
+  accounts?: number;            // counts, for the success message
+  categories?: number;
+  bookmarks?: number;
+}
+
+export interface ImportDataRequest {
+  passphrase: string;           // decrypts the chosen backup file
+}
+
+export interface ImportDataResult {
+  canceled?: boolean;           // user dismissed the open dialog
+  accounts?: number;            // counts imported (overwrote the vault)
+  categories?: number;
+  bookmarks?: number;
+}
+
 // ---- Bookmark ----
 
 export interface Bookmark {
@@ -227,6 +252,8 @@ export const IPC_CHANNELS = {
   SETTINGS_CLEAR_DATA:    'settings:clear-data',
   SETTINGS_SET_ACCOUNT_STATUS: 'settings:set-account-status',
   SETTINGS_CLEAR_ACCOUNT_TIMER: 'settings:clear-account-timer',
+  SETTINGS_EXPORT_DATA:   'settings:export-data',
+  SETTINGS_IMPORT_DATA:   'settings:import-data',
 
   // Events (main -> renderer)
   EVENT_TAB_CREATED:      'event:tab-created',

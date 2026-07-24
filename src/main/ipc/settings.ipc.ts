@@ -6,7 +6,9 @@
 //      are (grouped by domain), including each account's per-site status.
 //   2. Data management — clear the browser's cache / cookies / site storage.
 
-import { ipcMain, session as electronSession } from 'electron';
+import { ipcMain, session as electronSession, dialog, BrowserWindow, app } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   IPC_CHANNELS,
   IpcResponse,
@@ -17,10 +19,15 @@ import {
   LoginStatus,
   SetAccountStatusRequest,
   ClearAccountTimerRequest,
+  ExportDataRequest,
+  ExportDataResult,
+  ImportDataRequest,
+  ImportDataResult,
 } from '../../shared/types';
 import { loginEntryManager } from '../services/login-entry-manager';
 import { statusManager } from '../services/status-manager';
 import { sessionManager } from '../services/session-manager';
+import { buildEncryptedExport, importEncryptedBackup } from '../services/vault-transfer';
 
 export function registerSettingsIpc(): void {
   // ---- Site account management ----
@@ -169,6 +176,77 @@ export function registerSettingsIpc(): void {
       }
       statusManager.clearTimer(req.loginEntryId, req.domain);
       return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ---- Data export: write an encrypted, cross-platform backup file ----
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_EXPORT_DATA, async (event, req: ExportDataRequest): Promise<IpcResponse<ExportDataResult>> => {
+    try {
+      if (!req?.passphrase || req.passphrase.length < 4) {
+        return { success: false, error: 'Enter a passphrase of at least 4 characters to protect the backup.' };
+      }
+
+      const { fileContents, summary } = await buildEncryptedExport(req.passphrase);
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      const win = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined;
+      const { canceled, filePath } = await dialog.showSaveDialog(win as any, {
+        title: 'Export vault backup',
+        defaultPath: path.join(app.getPath('documents'), `vault-browser-backup-${stamp}.vaultbackup`),
+        filters: [{ name: 'Vault Browser Backup', extensions: ['vaultbackup', 'json'] }],
+      });
+
+      if (canceled || !filePath) {
+        return { success: true, data: { canceled: true } };
+      }
+
+      fs.writeFileSync(filePath, fileContents, { encoding: 'utf8', mode: 0o600 });
+
+      return {
+        success: true,
+        data: {
+          filePath,
+          accounts: summary.accounts,
+          categories: summary.categories,
+          bookmarks: summary.bookmarks,
+        },
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ---- Data import: decrypt a backup and OVERWRITE the current vault ----
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_IMPORT_DATA, async (event, req: ImportDataRequest): Promise<IpcResponse<ImportDataResult>> => {
+    try {
+      if (!req?.passphrase) {
+        return { success: false, error: 'Enter the passphrase used when the backup was created.' };
+      }
+
+      const win = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined;
+      const { canceled, filePaths } = await dialog.showOpenDialog(win as any, {
+        title: 'Import vault backup (this overwrites your current data)',
+        properties: ['openFile'],
+        filters: [{ name: 'Vault Browser Backup', extensions: ['vaultbackup', 'json'] }],
+      });
+
+      if (canceled || filePaths.length === 0) {
+        return { success: true, data: { canceled: true } };
+      }
+
+      const fileContents = fs.readFileSync(filePaths[0], 'utf8');
+      const summary = await importEncryptedBackup(fileContents, req.passphrase);
+
+      return {
+        success: true,
+        data: {
+          accounts: summary.accounts,
+          categories: summary.categories,
+          bookmarks: summary.bookmarks,
+        },
+      };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
