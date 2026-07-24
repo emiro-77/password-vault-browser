@@ -86,12 +86,27 @@ export default function Sidebar({
   const isActive = (status: LoginStatus | null) => !!status && ACTIVE_STATUSES.includes(status);
 
   // ---- Category context menu ----
-  const [menu, setMenu] = useState<{ x: number; y: number; category: Category } | null>(null);
+  // The menu is anchored ABOVE the clicked category chip (categories live at
+  // the bottom of the sidebar, so a downward menu would slide under the OS
+  // taskbar). We capture the chip's bounding rect and pin the menu's bottom
+  // edge just above the chip's top edge.
+  const [menu, setMenu] = useState<{ left: number; bottom: number; category: Category } | null>(null);
 
   const openMenu = (e: React.MouseEvent, category: Category) => {
     e.preventDefault();
     e.stopPropagation();
-    setMenu({ x: e.clientX, y: e.clientY, category });
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const MENU_WIDTH = 180; // must be >= .category-context-menu min-width
+    // Align the menu's left edge with the chip, but clamp so it never spills
+    // past the right viewport edge.
+    const left = Math.min(rect.left, window.innerWidth - MENU_WIDTH - 8);
+    setMenu({
+      left: Math.max(8, left),
+      // Distance from the viewport bottom up to the top of the chip, plus a
+      // small gap — CSS uses `bottom` so the menu grows upward.
+      bottom: window.innerHeight - rect.top + 6,
+      category,
+    });
   };
   const closeMenu = useCallback(() => setMenu(null), []);
 
@@ -280,7 +295,7 @@ export default function Sidebar({
       {menu && (
         <div
           className="category-context-menu"
-          style={{ left: menu.x, top: menu.y }}
+          style={{ left: menu.left, bottom: menu.bottom }}
           onClick={(e) => e.stopPropagation()}
         >
           <button onClick={() => { onEditCategory(menu.category); closeMenu(); }}>

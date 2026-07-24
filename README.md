@@ -1,4 +1,4 @@
-# Password Vault Browser
+# Vault Browser Desktop
 
 A privacy-focused, multi-session desktop browser (Electron) with isolated tabs
 and **per-site** credential management. Each login entry belongs to a specific
@@ -11,8 +11,8 @@ site (domain), and per-site login *status* is tracked for each site.
 - **Preload** (`src/preload`) — exposes a typed, sandboxed `window.pvbAPI` via
   `contextBridge`.
 - **Renderer** (`src/renderer`) — React browser shell UI:
-  - `components/AddressBar.tsx` — back / forward / refresh / URL input / new tab,
-    app name, bookmark star, and the **light/night theme toggle**
+  - `components/AddressBar.tsx` — back / forward / refresh / URL input,
+    bookmark star, the **app logo** (theme-aware), and the **light/night theme toggle**
   - `components/ThemeToggle.tsx` — sun/moon button that flips the whole UI theme
   - `components/BookmarksBar.tsx` — bookmarks bar
   - `components/Sidebar.tsx` — saved login entries (label, username/email,
@@ -192,6 +192,25 @@ The new `'used'` status was added to the `LoginStatus` union, the DB
 `CHECK` constraint (with a migration in `src/main/db/index.ts` that rebuilds
 `site_login_status` for existing databases), and the sidebar/settings badges.
 
+## Branding & UI polish (v0.6.0)
+
+- **Renamed** the product to **Vault Browser Desktop** (`APP_NAME`,
+  `package.json` `name`/`productName`, window title, renderer `<title>`).
+- **App icon** — the window/executable icon is `resources/icon.png`
+  (the "main" logo). Source logos live in `assets/renderer/` and are copied
+  into `dist/renderer/` at build time by `scripts/copy-assets.js`.
+- **Address-bar logo** — the plain "Vault Browser" text (previously between the
+  bookmark star and the theme toggle) is now a small logo image that is
+  **theme-aware**: the *light* logo (`vault-browser-light.png`) shows on the
+  dark/night theme, and the *main* logo (`vault-browser-main.png`) shows on the
+  light theme.
+- **Removed** the page-title indicator that sat between the URL input and the
+  bookmark star; the URL field now runs straight into the star button.
+- **Category right-click menu** now opens **above** the clicked category chip
+  (anchored to the chip's bounding rect and grown upward via CSS `bottom`),
+  so its Edit / Delete options are no longer clipped under the OS taskbar. The
+  `left` position is clamped to keep the menu inside the viewport.
+
 ## Testing & CI
 
 Unit tests live in `tests/` and run with `tsx`:
@@ -282,6 +301,10 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
 - ✅ Revised status model: single "active tab" per site, new "Used" (red) status
   for superseded accounts, and a 24h window that refreshes to "never used"; the
   minimized sidebar shows only never-used and active-tab accounts (v0.5.0)
+- ✅ Renamed to **Vault Browser Desktop**; new app icon and a theme-aware
+  address-bar logo (light logo on night theme, main logo on light theme) (v0.6.0)
+- ✅ Removed the address-bar page-title text; category right-click Edit/Delete
+  menu now opens above the chip instead of being clipped under the taskbar (v0.6.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

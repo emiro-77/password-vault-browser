@@ -2,7 +2,7 @@
 // Application Constants
 // ============================================================================
 
-export const APP_NAME = 'Password Vault Browser';
+export const APP_NAME = 'Vault Browser Desktop';
 export const APP_VERSION = '0.3.1';
 export const APP_CODE_NAME = 'pvb';
 

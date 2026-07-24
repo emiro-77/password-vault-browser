@@ -7,7 +7,6 @@ import ThemeToggle, { Theme } from './ThemeToggle';
 
 interface AddressBarProps {
   url: string;
-  title: string;
   canGoBack: boolean;
   canGoForward: boolean;
   isLoading: boolean;
@@ -24,7 +23,6 @@ interface AddressBarProps {
 
 export default function AddressBar({
   url,
-  title,
   canGoBack,
   canGoForward,
   isLoading,
@@ -108,11 +106,6 @@ export default function AddressBar({
         autoCapitalize="off"
       />
 
-      {/* Page title indicator */}
-      <span className="page-title-indicator">
-        {title}
-      </span>
-
       {/* Add-to-bookmark star button */}
       <button
         className={`bookmark-btn${isBookmarked ? ' active' : ''}`}
@@ -123,8 +116,14 @@ export default function AddressBar({
         {isBookmarked ? '★' : '☆'}
       </button>
 
-      {/* App name */}
-      <span className="app-name" title="Password Vault Browser">Vault Browser</span>
+      {/* App logo — light logo on the dark (night) theme, main logo on the light theme */}
+      <img
+        className="app-logo"
+        src={theme === 'light' ? './vault-browser-main.png' : './vault-browser-light.png'}
+        alt="Vault Browser Desktop"
+        title="Vault Browser Desktop"
+        draggable={false}
+      />
 
       {/* Light / Night theme toggle */}
       <ThemeToggle theme={theme} onToggle={onToggleTheme} />

@@ -346,7 +346,7 @@ export default function App() {
         setActiveTabId(null);
         setCurrentUrl('');
         setCurrentDomain(null);
-        setCurrentTitle('Password Vault Browser');
+        setCurrentTitle('Vault Browser Desktop');
       }
     }
 
@@ -650,7 +650,6 @@ export default function App() {
       <div className="chrome">
         <AddressBar
           url={currentUrl}
-          title={currentTitle}
           canGoBack={navigationState.canGoBack}
           canGoForward={navigationState.canGoForward}
           isLoading={navigationState.isLoading}

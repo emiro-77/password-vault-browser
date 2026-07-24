@@ -1,6 +1,6 @@
 {
-  "name": "password-vault-browser",
-  "version": "0.5.0",
+  "name": "vault-browser-desktop",
+  "version": "0.6.0",
   "description": "Privacy-focused multi-session browser with isolated tabs and global credential management",
   "main": "dist/main/index.js",
   "type": "commonjs",
@@ -10,7 +10,7 @@
     "build:preload": "tsc -p tsconfig.preload.json",
     "build:renderer": "node scripts/build-renderer.js",
     "typecheck:renderer": "tsc -p tsconfig.renderer.json --noEmit",
-    "copy-assets": "node -e \"const fs=require('fs'),p=require('path');fs.mkdirSync(p.join('dist','renderer','styles'),{recursive:true});fs.copyFileSync(p.join('src','renderer','index.html'),p.join('dist','renderer','index.html'));fs.copyFileSync(p.join('src','renderer','styles','global.css'),p.join('dist','renderer','styles','global.css'));\"",
+    "copy-assets": "node scripts/copy-assets.js",
     "start": "electron .",
     "dev": "npm run build && electron .",
     "clean": "rm -rf dist/",
@@ -20,7 +20,7 @@
   },
   "build": {
     "appId": "com.passwordvault.browser",
-    "productName": "Password Vault Browser",
+    "productName": "Vault Browser Desktop",
     "directories": {
       "output": "release"
     },

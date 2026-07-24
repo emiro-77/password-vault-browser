@@ -198,25 +198,15 @@ html, body {
   color: var(--text-muted);
 }
 
-/* ---- Top-bar right section: page title, app name, theme toggle ---- */
+/* ---- Top-bar right section: app logo, theme toggle ---- */
 
-.page-title-indicator {
-  font-size: 11px;
-  color: var(--text-muted);
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.app-logo {
+  height: 26px;
+  width: 26px;
+  object-fit: contain;
   flex-shrink: 0;
-}
-
-.app-name {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  flex-shrink: 0;
-  padding: 0 2px;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .theme-toggle-btn {
