@@ -15,6 +15,8 @@ import {
   ClearDataRequest,
   ClearDataResult,
   LoginStatus,
+  SetAccountStatusRequest,
+  ClearAccountTimerRequest,
 } from '../../shared/types';
 import { loginEntryManager } from '../services/login-entry-manager';
 import { statusManager } from '../services/status-manager';
@@ -36,11 +38,15 @@ export function registerSettingsIpc(): void {
         // so we report 'never_used' (they're global metadata only).
         let status: LoginStatus = 'never_used';
         let lastUsedAt: string | null = null;
+        let loggedInUntil: string | null = null;
+        let isActiveTab = false;
         if (domain) {
           const st = statusManager.getForEntryAndDomain(entry.id, domain);
           if (st) {
             status = st.status;
             lastUsedAt = st.lastUsedAt;
+            loggedInUntil = st.loggedInUntil;
+            isActiveTab = st.status === 'active_tab_open' || !!st.activeTabId;
           }
         }
 
@@ -50,11 +56,31 @@ export function registerSettingsIpc(): void {
           usernameOrEmail: entry.usernameOrEmail,
           status,
           lastUsedAt,
+          loggedInUntil,
+          isActiveTab,
         };
 
         const list = groups.get(domain);
         if (list) list.push(info);
         else groups.set(domain, [info]);
+      }
+
+      // Sort accounts within each group by time-remaining, SHORTEST first.
+      // Accounts with no timer (never_used / failed / etc.) sort after those
+      // with a timer; the active tab (longest remaining, ~24h) ends up last.
+      const remainingMs = (a: SiteAccountInfo): number => {
+        if (!a.loggedInUntil) return Number.POSITIVE_INFINITY;
+        const ms = new Date(a.loggedInUntil).getTime() - Date.now();
+        return ms > 0 ? ms : Number.POSITIVE_INFINITY;
+      };
+      for (const accounts of groups.values()) {
+        accounts.sort((a, b) => {
+          const ra = remainingMs(a);
+          const rb = remainingMs(b);
+          if (ra !== rb) return ra - rb;
+          // Stable tiebreak for two timer-less accounts: label alphabetical.
+          return a.label.localeCompare(b.label);
+        });
       }
 
       // Emit sorted: named sites alphabetically, unscoped ('') last.
@@ -117,6 +143,32 @@ export function registerSettingsIpc(): void {
       try { await sessionManager.clearAllSessions(); } catch { /* best-effort */ }
 
       return { success: true, data: { cleared } };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ---- Change an account's per-site status (from the edit dialog) ----
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_ACCOUNT_STATUS, async (_event, req: SetAccountStatusRequest): Promise<IpcResponse> => {
+    try {
+      if (!req?.loginEntryId || !req?.domain) {
+        return { success: false, error: 'A site (domain) is required to set status.' };
+      }
+      statusManager.changeStatus(req.loginEntryId, req.domain, req.status);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ---- Delete an account's 24h time-remaining data ----
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_CLEAR_ACCOUNT_TIMER, async (_event, req: ClearAccountTimerRequest): Promise<IpcResponse> => {
+    try {
+      if (!req?.loginEntryId || !req?.domain) {
+        return { success: false, error: 'A site (domain) is required to clear the timer.' };
+      }
+      statusManager.clearTimer(req.loginEntryId, req.domain);
+      return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
     }

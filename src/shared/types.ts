@@ -99,6 +99,21 @@ export interface SiteAccountInfo {
   usernameOrEmail: string;
   status: LoginStatus;          // computed per-site status for this domain
   lastUsedAt: string | null;
+  loggedInUntil: string | null; // end of the 24h window (null = no timer)
+  isActiveTab: boolean;         // true = the single active tab (status cannot be changed)
+}
+
+/** Request to change an account's per-site status from Settings. */
+export interface SetAccountStatusRequest {
+  loginEntryId: string;
+  domain: string;
+  status: LoginStatus;
+}
+
+/** Request to clear (delete) an account's 24h time-remaining data. */
+export interface ClearAccountTimerRequest {
+  loginEntryId: string;
+  domain: string;
 }
 
 /** A site (domain) and the accounts saved for it. */
@@ -210,6 +225,8 @@ export const IPC_CHANNELS = {
   // Settings
   SETTINGS_SITE_ACCOUNTS: 'settings:site-accounts',
   SETTINGS_CLEAR_DATA:    'settings:clear-data',
+  SETTINGS_SET_ACCOUNT_STATUS: 'settings:set-account-status',
+  SETTINGS_CLEAR_ACCOUNT_TIMER: 'settings:clear-account-timer',
 
   // Events (main -> renderer)
   EVENT_TAB_CREATED:      'event:tab-created',

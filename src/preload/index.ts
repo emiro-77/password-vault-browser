@@ -66,6 +66,8 @@ const IPC_CHANNELS = {
   // Settings
   SETTINGS_SITE_ACCOUNTS: 'settings:site-accounts',
   SETTINGS_CLEAR_DATA:    'settings:clear-data',
+  SETTINGS_SET_ACCOUNT_STATUS: 'settings:set-account-status',
+  SETTINGS_CLEAR_ACCOUNT_TIMER: 'settings:clear-account-timer',
 
   // Events (main -> renderer)
   EVENT_TAB_CREATED:      'event:tab-created',
@@ -159,6 +161,8 @@ const api = {
   settings: {
     siteAccounts: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SITE_ACCOUNTS),
     clearData: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CLEAR_DATA, req),
+    setAccountStatus: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_ACCOUNT_STATUS, req),
+    clearAccountTimer: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CLEAR_ACCOUNT_TIMER, req),
   },
 
   // ---- Event Listeners ----

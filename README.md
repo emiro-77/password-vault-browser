@@ -244,6 +244,41 @@ smooth, monotonic estimate (0→1) from the navigation lifecycle
 fades it out at 100%. The estimator's clamping/monotonic rules are covered by
 `tests/load-progress.test.ts`.
 
+## Site account management (v0.8.0)
+
+The **Site Accounts** view in the Settings tab is now fully manageable per
+account:
+
+- **24h time-remaining** — each account row shows a `⏳ 1h 05m` style countdown
+  to the **left of the status badge**, computed from the account's
+  `loggedInUntil` (end of the 24-hour login window). Accounts without an active
+  timer show no countdown. Formatting is done by `formatTimeRemaining` in
+  `SettingsPanel.tsx`.
+- **Sorted shortest → longest** — within each site group, accounts are ordered by
+  remaining time (shortest first). Timer-less accounts sink to the bottom, and
+  the single **active tab** (~24h) naturally lands last. Sorting happens in
+  `settings.ipc.ts` (`SETTINGS_SITE_ACCOUNTS`).
+- **Edit (✎)** — opens `AccountEditModal` to change **label**, **email/username**,
+  **password** (blank = keep the existing password; passwords are never sent to
+  the renderer), and **status**. Saving reuses `credentials.update`; a status
+  change is applied through the new `settings.setAccountStatus` IPC.
+- **Delete (🗑)** — removes the account (with a confirm prompt) via
+  `credentials.delete`, which cascades and clears its `site_login_status` rows.
+- **Status change clears the timer** — changing an account's status nulls
+  `first_login_at` / `logged_in_until`, matching the warning shown to the user:
+  *"Changing the status will delete the time-remaining data."* A dedicated
+  **Delete time-remaining data** button (in the modal) freezes the computed
+  status and clears just the timer via `settings.clearAccountTimer`.
+- **Active tab is immutable** — the one `active_tab_open` account can't have its
+  status changed. This is enforced both in the UI (disabled `<select>` +
+  warning) and in the backend (`statusManager.changeStatus` / `clearTimer`
+  throw for the active tab).
+
+New IPC channels: `settings:set-account-status` (`SETTINGS_SET_ACCOUNT_STATUS`)
+and `settings:clear-account-timer` (`SETTINGS_CLEAR_ACCOUNT_TIMER`), kept in
+sync between `src/shared/types.ts` and `src/preload/index.ts` by
+`tests/ipc-channels-sync.test.ts`.
+
 ## Testing & CI
 
 Unit tests live in `tests/` and run with `tsx`:
@@ -343,6 +378,11 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   bookkeeping, and one-time autofill (v0.7.0)
 - ✅ Light-blue page-load progress bar under the URL input, driven by an
   estimated-progress `EVENT_LOAD_PROGRESS` IPC channel (v0.7.0)
+- ✅ Site accounts show a 24h time-remaining countdown left of the status and
+  are sorted shortest→longest (active tab last) (v0.8.0)
+- ✅ Per-account edit (label / username / password / status) and delete from the
+  Settings tab, with active-tab status locked and a status-change/timer-clear
+  warning (v0.8.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

@@ -151,22 +151,31 @@ function createMockApi(): PvbAPI & { __isMock: true } {
     },
 
     settings: {
-      siteAccounts: () => ok([
-        {
-          domain: 'example.com',
-          accounts: [
-            { loginEntryId: 'mock-1', label: 'Personal Email', usernameOrEmail: 'you@example.com', status: 'active_tab_open' as const, lastUsedAt: now() },
-            { loginEntryId: 'mock-2', label: 'Work Account', usernameOrEmail: 'you@company.com', status: 'used' as const, lastUsedAt: now() },
-          ],
-        },
-        {
-          domain: '',
-          accounts: [
-            { loginEntryId: 'mock-3', label: 'Social Media', usernameOrEmail: '@yourhandle', status: 'never_used' as const, lastUsedAt: null },
-          ],
-        },
-      ]),
+      siteAccounts: () => {
+        const inMs = (ms: number) => new Date(Date.now() + ms).toISOString();
+        const HOUR = 3600 * 1000;
+        return ok([
+          {
+            domain: 'example.com',
+            // Deliberately unsorted here; the real handler sorts by time
+            // remaining (shortest first). "Used" with 1h remaining should
+            // appear before the active tab (~24h).
+            accounts: [
+              { loginEntryId: 'mock-2', label: 'Work Account', usernameOrEmail: 'you@company.com', status: 'used' as const, lastUsedAt: now(), loggedInUntil: inMs(1 * HOUR), isActiveTab: false },
+              { loginEntryId: 'mock-1', label: 'Personal Email', usernameOrEmail: 'you@example.com', status: 'active_tab_open' as const, lastUsedAt: now(), loggedInUntil: inMs(24 * HOUR - 60000), isActiveTab: true },
+            ],
+          },
+          {
+            domain: '',
+            accounts: [
+              { loginEntryId: 'mock-3', label: 'Social Media', usernameOrEmail: '@yourhandle', status: 'never_used' as const, lastUsedAt: null, loggedInUntil: null, isActiveTab: false },
+            ],
+          },
+        ]);
+      },
       clearData: () => ok({ cleared: ['cache', 'cookies', 'site storage'] }),
+      setAccountStatus: () => ok(undefined),
+      clearAccountTimer: () => ok(undefined),
     },
 
     sendChromeHeight: () => { /* no-op in mock mode */ },

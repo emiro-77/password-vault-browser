@@ -816,6 +816,45 @@ html, body {
   background: #b91c1c;
 }
 
+.modal-btn.subtle {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+.modal-btn.subtle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.modal-field-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.modal-warning {
+  background: rgba(243, 139, 168, 0.12);
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: var(--font-size-sm);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.modal-timer-row {
+  display: flex;
+  justify-content: flex-start;
+  margin: 4px 0 12px;
+}
+
+.account-edit-modal {
+  width: 420px;
+}
+
 /* ---- Loading indicator ---- */
 
 .loading-indicator {
@@ -1443,6 +1482,51 @@ html, body {
 
 .site-account-row .status-badge {
   flex-shrink: 0;
+}
+
+.site-account-remaining {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.site-account-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.site-account-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.site-account-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.site-account-action-btn.danger:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--error);
+  border-color: var(--error);
 }
 
 /* ---- Data management ---- */

@@ -204,6 +204,81 @@ export class StatusManager {
     };
   }
 
+  /**
+   * Change an account's per-site status from Settings.
+   *
+   * Rules enforced here (mirrored/warned in the UI):
+   * - The single "active tab" account's status may NOT be changed — it reflects
+   *   the live active tab. Callers must switch away first.
+   * - Changing the status deletes the 24h time-remaining data (first_login_at /
+   *   logged_in_until) and clears any active tab link, so the manually-set
+   *   status is authoritative and won't be recomputed/expired away.
+   */
+  changeStatus(loginEntryId: string, domain: string, status: LoginStatus): void {
+    const db = getDatabase();
+    const row = db.prepare(
+      'SELECT * FROM site_login_status WHERE login_entry_id = ? AND domain = ?'
+    ).get(loginEntryId, domain) as any;
+
+    // Guard: never let the caller set/keep 'active_tab_open' manually, and
+    // never allow changing a row that is currently the active tab.
+    const current = row ? this.computeCurrentStatus(row, Date.now()) : 'never_used';
+    if (current === 'active_tab_open' || (row && row.active_tab_id)) {
+      throw new Error('Cannot change the status of the active tab. Switch to another account first.');
+    }
+    if (status === 'active_tab_open') {
+      throw new Error('The "Active tab" status cannot be assigned manually.');
+    }
+
+    const now = new Date().toISOString();
+    if (row) {
+      db.prepare(`
+        UPDATE site_login_status
+        SET status = ?, first_login_at = NULL, logged_in_until = NULL,
+            active_tab_id = NULL, last_used_at = ?
+        WHERE id = ?
+      `).run(status, now, row.id);
+    } else {
+      const id = uuidv4();
+      db.prepare(`
+        INSERT INTO site_login_status (id, login_entry_id, domain, status, first_login_at, logged_in_until, last_used_at, active_tab_id)
+        VALUES (?, ?, ?, ?, NULL, NULL, ?, NULL)
+      `).run(id, loginEntryId, domain, status, now);
+    }
+  }
+
+  /**
+   * Delete an account's 24h time-remaining data for a domain WITHOUT changing
+   * its (computed) status label. Since a logged_in/active row computes to a
+   * time-based status, we persist the currently-computed label first so the
+   * account keeps a sensible status once the timer is gone.
+   *
+   * The active tab's timer may not be cleared (would desync the live tab).
+   */
+  clearTimer(loginEntryId: string, domain: string): void {
+    const db = getDatabase();
+    const row = db.prepare(
+      'SELECT * FROM site_login_status WHERE login_entry_id = ? AND domain = ?'
+    ).get(loginEntryId, domain) as any;
+    if (!row) return;
+
+    if (row.active_tab_id) {
+      throw new Error('Cannot clear the timer of the active tab. Switch to another account first.');
+    }
+
+    // Freeze the current computed status (e.g. 'used') so removing the window
+    // doesn't flip it back via computeCurrentStatus.
+    const frozen = this.computeCurrentStatus(row, Date.now());
+    const persisted = frozen === 'active_tab_open' ? 'used' : frozen;
+
+    db.prepare(`
+      UPDATE site_login_status
+      SET status = ?, first_login_at = NULL, logged_in_until = NULL,
+          active_tab_id = NULL, last_used_at = ?
+      WHERE id = ?
+    `).run(persisted, new Date().toISOString(), row.id);
+  }
+
   // ---- Private helpers ----
 
   private upsertStatus(
