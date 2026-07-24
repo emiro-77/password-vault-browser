@@ -63,6 +63,11 @@ const IPC_CHANNELS = {
   SITE_RULES_GET:         'site-rules:get',
   SITE_RULES_SET:         'site-rules:set',
 
+  LOGIN_PAGE_LIST:        'login-page:list',
+  LOGIN_PAGE_SAVE:        'login-page:save',
+  LOGIN_PAGE_DELETE:      'login-page:delete',
+  LOGIN_PAGE_RESOLVE:     'login-page:resolve',
+
   // Settings
   SETTINGS_SITE_ACCOUNTS: 'settings:site-accounts',
   SETTINGS_CLEAR_DATA:    'settings:clear-data',
@@ -157,6 +162,15 @@ const api = {
   siteRules: {
     get: (domain: string) => ipcRenderer.invoke(IPC_CHANNELS.SITE_RULES_GET, domain),
     set: (data: any) => ipcRenderer.invoke(IPC_CHANNELS.SITE_RULES_SET, data),
+  },
+
+  // ---- Login-page mappings (Save Current Page as Login Page) ----
+  loginPages: {
+    list: (mainDomain?: string) => ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_LIST, mainDomain),
+    save: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_SAVE, req),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_DELETE, id),
+    resolve: (currentUrl: string, loginEntryId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_RESOLVE, { currentUrl, loginEntryId }),
   },
 
   // ---- Settings ----

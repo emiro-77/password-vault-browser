@@ -9,6 +9,7 @@ import Sidebar from './components/Sidebar';
 import TabStrip from './components/TabStrip';
 import CategoryModal from './components/CategoryModal';
 import SettingsPanel from './components/SettingsPanel';
+import SaveLoginPageModal from './components/SaveLoginPageModal';
 import { Theme } from './components/ThemeToggle';
 import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus, Category } from '../shared/types';
 import { WebviewTag } from './types.d';
@@ -78,6 +79,9 @@ export default function App() {
   // Settings tab (opens above the browser view).
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Save-as-Login-Page modal (opens above the browser view).
+  const [loginPageModalOpen, setLoginPageModalOpen] = useState(false);
+
   const contentRef = useRef<HTMLDivElement>(null);
   const webviewRef = useRef<WebviewTag | null>(null);
 
@@ -107,6 +111,18 @@ export default function App() {
 
   const handleCloseSettings = useCallback(() => {
     setSettingsOpen(false);
+    api.tabs.setOverlay(false);
+  }, [api]);
+
+  // ---- Save current page as a login page ----
+
+  const handleOpenLoginPageModal = useCallback(() => {
+    setLoginPageModalOpen(true);
+    api.tabs.setOverlay(true);
+  }, [api]);
+
+  const handleCloseLoginPageModal = useCallback(() => {
+    setLoginPageModalOpen(false);
     api.tabs.setOverlay(false);
   }, [api]);
 
@@ -282,6 +298,33 @@ export default function App() {
 
     // Check if current tab already belongs to another login entry
     const currentTab = tabs.find(t => t.id === activeTabId);
+
+    // Step 0: If a saved login-page mapping applies to this site + account,
+    // open the saved login page (and autofill there) instead of the current
+    // page. This makes the main page / related pages route to the login page.
+    const resolved = await api.loginPages.resolve(currentUrl, loginEntryId);
+    if (resolved.success && resolved.data) {
+      const targetUrl = resolved.data.loginUrl;
+      // Reuse a plain guest tab (close it first) before opening the login tab.
+      if (currentTab?.type === 'guest') {
+        await api.tabs.close(activeTabId);
+        setTabs(prev => prev.filter(t => t.id !== activeTabId));
+      }
+      const mapRes = await api.tabs.createLogin(loginEntryId, targetUrl);
+      if (mapRes.success && mapRes.data) {
+        const newTab = mapRes.data;
+        setTabs(prev => (prev.some(t => t.id === newTab.id) ? prev : [...prev, newTab]));
+        setActiveTabId(newTab.id);
+        setCurrentUrl(newTab.currentUrl);
+        setCurrentDomain(newTab.domain);
+        setCurrentTitle('Loading...');
+        await api.tabs.switch(newTab.id);
+        if (newTab.domain) {
+          setTimeout(() => loadDomainStatuses(newTab.domain), 200);
+        }
+      }
+      return;
+    }
 
     // Step 1: Try autofill on the current tab if hostname matches
     const res = await api.autofill.execute(activeTabId, loginEntryId, currentUrl);
@@ -683,6 +726,7 @@ export default function App() {
           onRefresh={handleRefresh}
           onAddBookmark={handleAddBookmark}
           isBookmarked={isCurrentBookmarked}
+          onSetLoginPage={handleOpenLoginPageModal}
           theme={theme}
           onToggleTheme={handleToggleTheme}
           onOpenSettings={handleOpenSettings}
@@ -833,6 +877,18 @@ export default function App() {
           currentDomain={currentDomain}
           onCancel={handleCloseCategoryModal}
           onSave={handleSaveCategory}
+        />
+      )}
+
+      {/* Save-current-page-as-login-page modal */}
+      {loginPageModalOpen && (
+        <SaveLoginPageModal
+          currentUrl={currentUrl}
+          currentDomain={currentDomain}
+          openedDomains={Array.from(new Set(tabs.map(t => t.domain).filter(Boolean) as string[]))}
+          categories={categories}
+          onClose={handleCloseLoginPageModal}
+          onSaved={(_msg) => { handleCloseLoginPageModal(); }}
         />
       )}
 

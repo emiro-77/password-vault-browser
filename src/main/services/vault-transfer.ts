@@ -56,6 +56,7 @@ interface VaultPayload {
   bookmarks: Array<Record<string, unknown>>;
   siteLoginStatus: Array<Record<string, unknown>>;
   siteRules: Array<Record<string, unknown>>;
+  loginPageMappings?: Array<Record<string, unknown>>; // optional for backward-compat with older backups
 }
 
 interface BackupEnvelope {
@@ -128,6 +129,7 @@ export async function buildEncryptedExport(
     bookmarks: db.prepare('SELECT * FROM bookmarks').all() as any[],
     siteLoginStatus: db.prepare('SELECT * FROM site_login_status').all() as any[],
     siteRules: db.prepare('SELECT * FROM site_rules').all() as any[],
+    loginPageMappings: db.prepare('SELECT * FROM login_page_mappings').all() as any[],
   };
 
   const plaintext = Buffer.from(JSON.stringify(payload), 'utf8');
@@ -233,6 +235,7 @@ export async function importEncryptedBackup(
 
   const wipeAndInsert = db.transaction(() => {
     db.exec(`
+      DELETE FROM login_page_mappings;
       DELETE FROM category_accounts;
       DELETE FROM categories;
       DELETE FROM bookmarks;
@@ -262,6 +265,8 @@ export async function importEncryptedBackup(
     insertRows(db, 'bookmarks', payload.bookmarks);
     insertRows(db, 'site_login_status', payload.siteLoginStatus);
     insertRows(db, 'site_rules', payload.siteRules);
+    // login_page_mappings references categories(id), so insert AFTER categories.
+    insertRows(db, 'login_page_mappings', payload.loginPageMappings);
   });
 
   wipeAndInsert();

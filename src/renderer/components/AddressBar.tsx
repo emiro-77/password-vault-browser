@@ -18,6 +18,7 @@ interface AddressBarProps {
   onRefresh: () => void;
   onAddBookmark: () => void;
   isBookmarked?: boolean;
+  onSetLoginPage: () => void;
   theme: Theme;
   onToggleTheme: () => void;
   onOpenSettings: () => void;
@@ -35,6 +36,7 @@ export default function AddressBar({
   onRefresh,
   onAddBookmark,
   isBookmarked = false,
+  onSetLoginPage,
   theme,
   onToggleTheme,
   onOpenSettings,
@@ -117,6 +119,18 @@ export default function AddressBar({
         title={isBookmarked ? 'Bookmarked' : 'Add bookmark'}
       >
         {isBookmarked ? '★' : '☆'}
+      </button>
+
+      {/* Set-as-Login-Page button — immediately to the right of the star.
+          Saves the current page as the login page for a chosen main website. */}
+      <button
+        className="login-page-btn"
+        onClick={onSetLoginPage}
+        disabled={!url || url === 'about:blank'}
+        title="Set this page as a login page for a website"
+        aria-label="Set as login page"
+      >
+        🔑
       </button>
 
       {/* App logo — light logo on the dark (night) theme, main logo on the light theme */}

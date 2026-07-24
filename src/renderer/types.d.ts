@@ -2,7 +2,7 @@
 // Type declarations for the renderer's window.pvbAPI
 // ============================================================================
 
-import { IpcResponse, LoginEntry, Bookmark, SiteLoginStatus, TabInfo, Category, CategoryCreateRequest, CategoryUpdateRequest, SiteAccountsGroup, ClearDataRequest, ClearDataResult, SetAccountStatusRequest, ClearAccountTimerRequest, ExportDataRequest, ExportDataResult, ImportDataRequest, ImportDataResult } from '../shared/types';
+import { IpcResponse, LoginEntry, Bookmark, SiteLoginStatus, TabInfo, Category, CategoryCreateRequest, CategoryUpdateRequest, SiteAccountsGroup, ClearDataRequest, ClearDataResult, SetAccountStatusRequest, ClearAccountTimerRequest, ExportDataRequest, ExportDataResult, ImportDataRequest, ImportDataResult, LoginPageMapping, SaveLoginPageRequest, ResolvedLoginPage } from '../shared/types';
 
 export interface PvbAPI {
   credentials: {
@@ -56,6 +56,13 @@ export interface PvbAPI {
     clearAccountTimer: (req: ClearAccountTimerRequest) => Promise<IpcResponse>;
     exportData: (req: ExportDataRequest) => Promise<IpcResponse<ExportDataResult>>;
     importData: (req: ImportDataRequest) => Promise<IpcResponse<ImportDataResult>>;
+  };
+
+  loginPages: {
+    list: (mainDomain?: string) => Promise<IpcResponse<LoginPageMapping[]>>;
+    save: (req: SaveLoginPageRequest) => Promise<IpcResponse<LoginPageMapping>>;
+    delete: (id: string) => Promise<IpcResponse<{ deleted: boolean }>>;
+    resolve: (currentUrl: string, loginEntryId: string) => Promise<IpcResponse<ResolvedLoginPage | null>>;
   };
 
   sendChromeHeight: (height: number) => void;

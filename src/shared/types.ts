@@ -90,6 +90,37 @@ export interface CategoryUpdateRequest {
   accountIds?: string[];
 }
 
+// ---- Login-page mappings (Save Current Page as Login Page) ----
+
+/**
+ * Connects a MAIN website (eTLD+1) to the exact login-page URL that should be
+ * opened + autofilled when an account is selected on the main site or any
+ * nested/related page.
+ */
+export interface LoginPageMapping {
+  id: string;
+  mainDomain: string;            // eTLD+1 of the main website, e.g. 'chatgpt.com'
+  loginUrl: string;              // full URL of the login page to open + autofill
+  categoryId: string | null;     // restrict to this category (when restricted)
+  categoryRestricted: boolean;   // true = only accounts in categoryId may use it
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveLoginPageRequest {
+  mainDomain: string;            // chosen main website (eTLD+1)
+  loginUrl: string;              // the current page being saved as the login page
+  categoryId?: string | null;    // optional category
+  categoryRestricted?: boolean;  // default false = any account can use it
+}
+
+/** Result of resolving whether a selected account should open a saved login page. */
+export interface ResolvedLoginPage {
+  mappingId: string;
+  mainDomain: string;
+  loginUrl: string;
+}
+
 // ---- Settings: site account management ----
 
 /** One account row within a site group, with its current per-site status. */
@@ -246,6 +277,12 @@ export const IPC_CHANNELS = {
   // Site Rules (future extension)
   SITE_RULES_GET:         'site-rules:get',
   SITE_RULES_SET:         'site-rules:set',
+
+  // Login-page mappings (Save Current Page as Login Page)
+  LOGIN_PAGE_LIST:        'login-page:list',
+  LOGIN_PAGE_SAVE:        'login-page:save',
+  LOGIN_PAGE_DELETE:      'login-page:delete',
+  LOGIN_PAGE_RESOLVE:     'login-page:resolve',
 
   // Settings
   SETTINGS_SITE_ACCOUNTS: 'settings:site-accounts',

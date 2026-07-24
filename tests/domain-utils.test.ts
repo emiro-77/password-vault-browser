@@ -17,6 +17,7 @@ import {
   hostnameMatches,
   isValidUrl,
   normalizeUrlOrSearch,
+  belongsToMainSite,
 } from '../src/main/services/domain-utils';
 
 // ============================================================================
@@ -218,6 +219,46 @@ function test_normalizeUrlOrSearch() {
 }
 
 // ============================================================================
+// belongsToMainSite() — login page / main page / related pages grouping
+// ============================================================================
+
+function test_belongsToMainSite() {
+  console.log('Testing belongsToMainSite()...');
+
+  // Login subdomain belongs to the main site (eTLD+1 match).
+  console.assert(
+    belongsToMainSite('https://login.chatgpt.com/auth', 'chatgpt.com') === true,
+    'login.chatgpt.com should belong to chatgpt.com'
+  );
+  // Main page and nested/related pages under it belong too.
+  console.assert(
+    belongsToMainSite('https://chatgpt.com/c/123', 'chatgpt.com') === true,
+    'nested chatgpt.com path should belong to chatgpt.com'
+  );
+  console.assert(
+    belongsToMainSite('https://www.chatgpt.com', 'chatgpt.com') === true,
+    'www.chatgpt.com should belong to chatgpt.com'
+  );
+  // A user-entered main domain with www is normalized.
+  console.assert(
+    belongsToMainSite('https://chatgpt.com', 'www.chatgpt.com') === true,
+    'main domain with www prefix should still match'
+  );
+  // Unrelated site does NOT belong.
+  console.assert(
+    belongsToMainSite('https://example.com', 'chatgpt.com') === false,
+    'example.com must NOT belong to chatgpt.com'
+  );
+  // Non-http is rejected.
+  console.assert(
+    belongsToMainSite('ftp://chatgpt.com', 'chatgpt.com') === false,
+    'non-http URL must not match'
+  );
+
+  console.log('  ✓ All belongsToMainSite tests passed');
+}
+
+// ============================================================================
 // Run all tests
 // ============================================================================
 
@@ -228,6 +269,7 @@ function runAllTests() {
   test_sameDomain();
   test_isValidUrl();
   test_normalizeUrlOrSearch();
+  test_belongsToMainSite();
   console.log('\n✓ All domain-utils tests completed.');
 }
 

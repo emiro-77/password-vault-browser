@@ -322,6 +322,58 @@ that import replaces all existing data.
 New IPC channels: `settings:export-data` (`SETTINGS_EXPORT_DATA`) and
 `settings:import-data` (`SETTINGS_IMPORT_DATA`).
 
+## Save current page as login page (v1.0.0)
+
+You can now teach the browser which page to open when logging in to a site.
+A **🔑 "Set as login page"** button sits immediately to the right of the
+bookmark star in the address bar. On a login page (e.g. `login.chatgpt.com`)
+click it to open the **Save login page** modal and map that page to a main
+website (e.g. `chatgpt.com`).
+
+### How mappings work
+
+- **Main website** — pick one of the sites you've already opened (deduped from
+  the open tabs plus the current domain) as the site this login page serves.
+- **Category** — optionally pick an existing category or create a new one. When
+  a mapping is category-restricted, only accounts in that category use it.
+- **Category restriction toggle** — turn restriction off so **any** account can
+  use the mapping whenever you're on the main website or a related/nested page.
+
+Once saved, whenever you're on the main website **or any related page under the
+same domain** and you select an account in the vault sidebar, the browser opens
+the saved login URL and autofills that account's credentials
+(`handleSelectLoginEntry` resolves the mapping first via
+`api.loginPages.resolve`, then reuses the existing `tabs.createLogin` +
+autofill path).
+
+### URL association / shared vault data
+
+Per-site status and vault data are keyed by `extractDomain(url)` (eTLD+1), so
+`login.chatgpt.com`, `chatgpt.com` and any nested path already **share the same
+connection data** (account info, login time, status) in the sidebar — the
+mapping only needs to remember which URL to open and the category rule. The
+`belongsToMainSite(url, mainDomain)` helper (in `domain-utils.ts`, covered by
+`tests/domain-utils.test.ts`) formalizes this grouping.
+
+### Resolution precedence
+
+`LoginPageManager.resolveForSelection(currentUrl, loginEntryId)`: a restricted
+mapping whose category the account belongs to **wins** over an unrestricted
+mapping; if only non-matching restricted mappings exist, resolution returns
+`null` and the app falls through to normal autofill.
+
+### Data management (export / import)
+
+The `login_page_mappings` table is included in the encrypted `.vaultbackup`
+export/import so saved login pages and their related-URL associations transfer
+to other devices correctly. FK ordering is respected (mappings are wiped before
+`categories` and inserted after them, since `category_id` references
+`categories(id)`).
+
+New table: `login_page_mappings` (`id`, `main_domain`, `login_url`,
+`category_id`, `category_restricted`, timestamps). New IPC channels:
+`login-page:list` / `:save` / `:delete` / `:resolve`.
+
 ## Testing & CI
 
 Unit tests live in `tests/` and run with `tsx`:
@@ -429,6 +481,10 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
 - ✅ Encrypted, cross-platform data **export**/**import** (passphrase-protected
   `.vaultbackup` JSON, AES-256-GCM + PBKDF2); import wipes and overwrites the
   current vault (v0.9.0)
+- ✅ **Save current page as login page**: 🔑 address-bar button maps a login
+  page to a main website, with category selection + restriction toggle;
+  selecting an account on the main site (or any related/nested page) opens the
+  saved login URL and autofills. Mappings export/import with the vault (v1.0.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

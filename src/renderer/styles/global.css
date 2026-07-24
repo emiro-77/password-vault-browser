@@ -314,6 +314,33 @@ html, body {
   cursor: default;
 }
 
+/* Set-as-Login-Page button — sits immediately to the right of the star. */
+.login-page-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.login-page-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.login-page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ---- Bookmarks Bar ---- */
 
 .bookmarks-bar {
@@ -853,6 +880,42 @@ html, body {
 
 .account-edit-modal {
   width: 420px;
+}
+
+.login-page-modal {
+  width: 460px;
+}
+
+.modal-hint {
+  margin: 6px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.modal-hint code,
+.settings-section-desc code,
+.login-page-modal code {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+  font-size: 0.9em;
+}
+
+.modal-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.modal-checkbox-row input {
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 /* ---- Loading indicator ---- */

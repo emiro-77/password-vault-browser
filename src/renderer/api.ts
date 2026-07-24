@@ -180,6 +180,23 @@ function createMockApi(): PvbAPI & { __isMock: true } {
       importData: () => ok({ accounts: 3, categories: 1, bookmarks: 2 }),
     },
 
+    loginPages: {
+      list: () => ok([]),
+      save: (req: any) => ok({
+        id: 'mock-map-1',
+        mainDomain: req?.mainDomain ?? 'example.com',
+        loginUrl: req?.loginUrl ?? 'https://login.example.com',
+        categoryId: req?.categoryId ?? null,
+        categoryRestricted: !!req?.categoryRestricted,
+        createdAt: now(),
+        updatedAt: now(),
+      }),
+      delete: () => ok({ deleted: true }),
+      // In mock mode no mapping is configured, so selection falls through to
+      // the normal autofill path.
+      resolve: () => ok(null),
+    },
+
     sendChromeHeight: () => { /* no-op in mock mode */ },
     sendTheme: () => { /* no-op in mock mode */ },
     sendSidebarWidth: () => { /* no-op in mock mode */ },

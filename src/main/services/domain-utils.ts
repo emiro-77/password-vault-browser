@@ -95,6 +95,23 @@ export function hostnameMatches(url: string, expectedHostname: string): boolean 
 }
 
 /**
+ * Whether a URL belongs to a given "main website" — i.e. its eTLD+1 matches
+ * `mainDomain`. This groups the login page (login.chatgpt.com), the main page
+ * (chatgpt.com) and any nested/related page (chatgpt.com/settings) together,
+ * because they all share the same eTLD+1.
+ *
+ *   belongsToMainSite('https://login.chatgpt.com/auth', 'chatgpt.com') -> true
+ *   belongsToMainSite('https://chatgpt.com/c/123', 'chatgpt.com')      -> true
+ *   belongsToMainSite('https://example.com', 'chatgpt.com')            -> false
+ */
+export function belongsToMainSite(url: string, mainDomain: string): boolean {
+  const d = extractDomain(url);
+  if (!d) return false;
+  const normalizedMain = mainDomain.toLowerCase().replace(/^www\./, '');
+  return d === normalizedMain;
+}
+
+/**
  * Validate that a URL is a proper, navigable http/https URL.
  */
 export function isValidUrl(input: string): boolean {

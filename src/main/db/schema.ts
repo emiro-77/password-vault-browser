@@ -86,6 +86,25 @@ CREATE TABLE IF NOT EXISTS tabs (
   last_active_at  TEXT NOT NULL
 );
 
+-- Saved "login page" mappings (Feature: Save Current Page as Login Page).
+-- Connects a MAIN website (eTLD+1, e.g. 'chatgpt.com') to the exact login-page
+-- URL that should be opened + autofilled when an account is selected while the
+-- user is on the main site or any nested/related page under it.
+--   category_id         : optional category this mapping is restricted to
+--   category_restricted : 1 = only accounts in category_id may use this mapping
+--                         0 = any account on the main site may use it
+CREATE TABLE IF NOT EXISTS login_page_mappings (
+  id                  TEXT PRIMARY KEY,
+  main_domain         TEXT NOT NULL,          -- eTLD+1 of the main website
+  login_url           TEXT NOT NULL,          -- full URL to open + autofill
+  category_id         TEXT REFERENCES categories(id) ON DELETE SET NULL,
+  category_restricted INTEGER NOT NULL DEFAULT 0,
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_page_mappings_domain ON login_page_mappings(main_domain);
+
 -- Optional future: site-specific autofill selectors
 CREATE TABLE IF NOT EXISTS site_rules (
   id                         TEXT PRIMARY KEY,
