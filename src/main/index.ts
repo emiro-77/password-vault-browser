@@ -27,6 +27,19 @@ import {
 
 let mainWindow: BrowserWindow | null = null;
 
+// ---- Performance: Chromium command-line switches ----
+// These are set before `app.whenReady()` so they take effect for every
+// BrowserView/webContents the app creates. They meaningfully speed up page
+// rendering and scrolling on typical desktop hardware.
+//   - enable GPU rasterization + zero-copy so compositing is done on the GPU
+//   - ignore the GPU blocklist so hardware accel is used on more machines
+//   - a larger disk cache so repeat visits and sub-resources load from cache
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization');
+app.commandLine.appendSwitch('disk-cache-size', String(256 * 1024 * 1024)); // 256 MB
+
 /**
  * Create the main application window.
  */

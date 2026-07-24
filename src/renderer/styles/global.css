@@ -144,6 +144,38 @@ html, body {
   padding: 0 12px;
   gap: 8px;
   background: var(--bg-secondary);
+  /* Anchor for the page-load progress bar pinned to the bottom edge. */
+  position: relative;
+}
+
+/* ---- Page-load progress bar (light blue, under the URL input row) ---- */
+
+.load-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: transparent;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.load-progress-fill {
+  height: 100%;
+  /* Light-blue gradient with a soft leading glow. */
+  background: linear-gradient(90deg, #5eb2ff 0%, #4da3ff 60%, #7cc4ff 100%);
+  box-shadow: 0 0 6px rgba(77, 163, 255, 0.7);
+  border-radius: 0 2px 2px 0;
+  /* Smoothly animate width increases between progress milestones. */
+  transition: width 0.25s ease-out, opacity 0.2s ease-out;
+}
+
+/* When the load finishes (100%), fade the full bar out. */
+.load-progress-fill.complete {
+  opacity: 0;
+  transition: width 0.15s ease-out, opacity 0.25s ease-out 0.05s;
 }
 
 .nav-btn {

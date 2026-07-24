@@ -12,6 +12,7 @@ import { normalizeUrlOrSearch } from '../services/domain-utils';
 import { extractHostname, extractDomain } from '../services/domain-utils';
 import { canGoBack, canGoForward } from '../services/webcontents-utils';
 import { AUTOFILL_PRELOAD } from '../../shared/constants';
+import { getDatabase } from '../db';
 import * as path from 'path';
 
 /** Broadcast a message to every open app window (the renderer UI). */
@@ -80,8 +81,13 @@ export function registerTabsIpc(): void {
       // Load the URL
       view.webContents.loadURL(normalizedUrl);
 
-      // Wait for page to load, then autofill
-      view.webContents.on('did-finish-load', async () => {
+      // Wait for the page to load, then autofill — but only ONCE. The old
+      // handler stayed attached and re-ran autofill on every finish-load
+      // (each SPA re-render), wasting work and risking overwriting user input.
+      let autofilled = false;
+      const onFirstLoad = async () => {
+        if (autofilled) return;
+
         const secretRef = loginEntryManager.getSecretRef(loginEntryId);
         if (!secretRef) return;
 
@@ -90,6 +96,8 @@ export function registerTabsIpc(): void {
 
         const currentUrl = view.webContents.getURL();
         if (domain && extractDomain(currentUrl) === domain) {
+          autofilled = true;
+          view.webContents.off('did-finish-load', onFirstLoad);
           await autofillEngine.autofill(view, {
             url: currentUrl,
             username: entry.usernameOrEmail,
@@ -100,7 +108,8 @@ export function registerTabsIpc(): void {
           statusManager.markLoggedIn(loginEntryId, domain, tabInfo.id);
           emitStatusChanged(domain);
         }
-      });
+      };
+      view.webContents.on('did-finish-load', onFirstLoad);
 
       return { success: true, data: tabInfo };
     } catch (err: any) {
@@ -202,8 +211,19 @@ function createViewForTab(tabId: string, partitionId: string): BrowserView {
       contextIsolation: true,
       // Autofill preload — injected into webview content
       preload: path.join(__dirname, '../../preload/autofill-preload.js'),
+      // ---- Performance ----
+      // Keep the active page's timers/rAF running at full speed (no throttling)
+      // so scrolling and animations stay smooth.
+      backgroundThrottling: false,
+      // Cache decoded images between navigations for snappier back/forward.
+      // (Electron/Chromium defaults are conservative; these are safe wins.)
+      webgl: true,
     },
   });
+
+  // A solid background avoids a white flash + an extra full-page repaint on
+  // first paint, which makes navigations feel faster.
+  view.setBackgroundColor('#ffffff');
 
   return view;
 }
@@ -234,6 +254,19 @@ function setupViewEvents(tabId: string, view: BrowserView): void {
     });
   };
 
+  // ---- Estimated load progress (0..1) ----
+  // Chromium does not expose a true byte-level loading percentage, so we
+  // synthesize a smooth, believable progress from the navigation lifecycle:
+  //   start-loading -> 0.08, start-navigation -> 0.25, dom-ready -> 0.65,
+  //   each frame finish nudges it up, stop-loading -> 1.0 (then hidden).
+  let progress = 0;
+  const emitProgress = (value: number) => {
+    // Never go backwards during a single load; clamp to [0,1].
+    progress = Math.max(progress, Math.min(1, value));
+    broadcast(IPC_CHANNELS.EVENT_LOAD_PROGRESS, { tabId, progress });
+  };
+  const resetProgress = () => { progress = 0; };
+
   // URL changed (full navigation + in-page/SPA navigation)
   wc.on('did-navigate', (_event, url) => {
     emitUrl(url);
@@ -251,17 +284,44 @@ function setupViewEvents(tabId: string, view: BrowserView): void {
   });
 
   // Loading state — include nav availability so back/forward buttons update.
-  wc.on('did-start-loading', () => emitNavState(true));
-  wc.on('did-stop-loading', () => emitNavState(false));
+  wc.on('did-start-loading', () => {
+    emitNavState(true);
+    resetProgress();
+    emitProgress(0.08);
+  });
+  wc.on('did-stop-loading', () => {
+    emitNavState(false);
+    emitProgress(1);
+  });
+
+  // Progress milestones through the navigation lifecycle.
+  wc.on('did-start-navigation', (_e, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) emitProgress(0.25);
+  });
+  wc.on('did-frame-finish-load', (_e, isMainFrame) => {
+    // Sub-frames nudge progress up a little; the main frame is nearly done.
+    emitProgress(isMainFrame ? 0.9 : Math.min(0.85, progress + 0.05));
+  });
 
   // Emit an authoritative nav state once the DOM is ready, so buttons reflect
   // history even for the very first load.
-  wc.on('dom-ready', () => emitNavState(wc.isLoading()));
+  wc.on('dom-ready', () => {
+    emitNavState(wc.isLoading());
+    emitProgress(0.65);
+  });
+
+  // Drop the per-tab persisted-URL cache when the view goes away.
+  wc.on('destroyed', () => { lastPersistedUrl.delete(tabId); });
 }
 
+// Remember the last URL persisted per tab so repeated events for the same URL
+// (common with SPA in-page navigation) don't hit SQLite again.
+const lastPersistedUrl = new Map<string, string>();
+
 function persistTabUrl(tabId: string, url: string): void {
+  if (lastPersistedUrl.get(tabId) === url) return;
+  lastPersistedUrl.set(tabId, url);
   try {
-    const { getDatabase } = require('../db');
     const db = getDatabase();
     db.prepare('UPDATE tabs SET current_url = ?, domain = ? WHERE id = ?')
       .run(url, extractDomain(url), tabId);

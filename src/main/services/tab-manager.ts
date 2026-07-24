@@ -43,6 +43,9 @@ export class TabManager {
    *  renderer can receive focus & clicks (a BrowserView always renders above the
    *  shell HTML, so it must be removed, not just z-index'd). */
   private overlayActive: boolean = false;
+  /** Views that have already had setAutoResize applied (it persists, so it
+   *  only needs to be set once — avoids redundant work on every switch). */
+  private autoResizeViews: WeakSet<BrowserView> = new WeakSet();
 
   /**
    * Attach the tab manager to a browser window.
@@ -216,8 +219,12 @@ export class TabManager {
     // getContentBounds excludes the OS window frame/titlebar.
     const bounds = this.window.getContentBounds();
     view.setBounds(computeViewBounds(bounds.width, bounds.height, this.sidebarWidth, this.chromeHeight));
-    // Auto-resize so the view follows window resizes between explicit updates.
-    view.setAutoResize({ width: true, height: true });
+    // Enable auto-resize only ONCE per view (it persists). Re-calling it on
+    // every bounds update was redundant work on each switch/resize.
+    if (!this.autoResizeViews.has(view)) {
+      view.setAutoResize({ width: true, height: true });
+      this.autoResizeViews.add(view);
+    }
   }
 
   /**

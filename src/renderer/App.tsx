@@ -48,6 +48,9 @@ export default function App() {
   const [currentDomain, setCurrentDomain] = useState<string | null>(null);
   const [currentTitle, setCurrentTitle] = useState('New Tab');
   const [navigationState, setNavigationState] = useState<NavigationState>({ canGoBack: false, canGoForward: false, isLoading: false });
+  // Estimated page-load progress (0..1). Drives the light-blue loading bar
+  // under the URL input. null = idle/hidden.
+  const [loadProgress, setLoadProgress] = useState<number | null>(null);
 
   const [loginEntries, setLoginEntries] = useState<LoginEntry[]>([]);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -457,13 +460,33 @@ export default function App() {
       }
     });
 
+    // Estimated page-load progress -> drives the light-blue bar under the URL.
+    // When it reaches 1 (100%), briefly show the full bar then hide it.
+    const unsub5 = api.on('event:load-progress', (data: any) => {
+      if (data.tabId !== activeTabId) return;
+      const p = typeof data.progress === 'number' ? data.progress : 0;
+      if (p >= 1) {
+        setLoadProgress(1);
+        window.setTimeout(() => setLoadProgress(null), 250);
+      } else {
+        setLoadProgress(p);
+      }
+    });
+
     return () => {
       unsub1();
       unsub2();
       unsub3();
       unsub4();
+      unsub5();
     };
   }, [api, activeTabId, currentDomain, loadDomainStatuses]);
+
+  // Reset the loading bar when switching tabs so a stale progress value from
+  // the previous tab doesn't linger.
+  useEffect(() => {
+    setLoadProgress(null);
+  }, [activeTabId]);
 
   // ---- Window resize -> update BrowserView bounds ----
 
@@ -653,6 +676,7 @@ export default function App() {
           canGoBack={navigationState.canGoBack}
           canGoForward={navigationState.canGoForward}
           isLoading={navigationState.isLoading}
+          loadProgress={loadProgress}
           onNavigate={handleNavigate}
           onGoBack={handleGoBack}
           onGoForward={handleGoForward}

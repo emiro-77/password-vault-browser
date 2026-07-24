@@ -10,6 +10,8 @@ interface AddressBarProps {
   canGoBack: boolean;
   canGoForward: boolean;
   isLoading: boolean;
+  /** Estimated page-load progress 0..1, or null when idle/hidden. */
+  loadProgress?: number | null;
   onNavigate: (url: string) => void;
   onGoBack: () => void;
   onGoForward: () => void;
@@ -26,6 +28,7 @@ export default function AddressBar({
   canGoBack,
   canGoForward,
   isLoading,
+  loadProgress = null,
   onNavigate,
   onGoBack,
   onGoForward,
@@ -137,6 +140,17 @@ export default function AddressBar({
       >
         ⚙
       </button>
+
+      {/* Page-load progress bar — light blue, stuck to the bottom edge of the
+          address bar (directly under the URL input row). Hidden when idle. */}
+      {loadProgress !== null && (
+        <div className="load-progress-track" aria-hidden="true">
+          <div
+            className={`load-progress-fill${loadProgress >= 1 ? ' complete' : ''}`}
+            style={{ width: `${Math.round(loadProgress * 100)}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 }

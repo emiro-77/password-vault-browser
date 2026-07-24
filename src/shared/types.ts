@@ -219,6 +219,7 @@ export const IPC_CHANNELS = {
   EVENT_PAGE_TITLE_CHANGED: 'event:page-title-changed',
   EVENT_NAVIGATION_STATE_CHANGED: 'event:nav-state-changed',
   EVENT_STATUS_CHANGED:   'event:status-changed',
+  EVENT_LOAD_PROGRESS:    'event:load-progress',
 } as const;
 
 // ---- IPC Request / Response Types ----

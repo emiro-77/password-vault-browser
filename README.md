@@ -211,6 +211,39 @@ The new `'used'` status was added to the `LoginStatus` union, the DB
   so its Edit / Delete options are no longer clipped under the OS taskbar. The
   `left` position is clamped to keep the menu inside the viewport.
 
+## Performance & loading bar (v0.7.0)
+
+**Faster rendering.** Several architecture/runtime changes make pages load and
+scroll noticeably faster:
+
+- **GPU-accelerated compositing** — Chromium switches set before `app.whenReady()`
+  in `src/main/index.ts`: `enable-gpu-rasterization`, `enable-zero-copy`,
+  `ignore-gpu-blocklist`, `CanvasOopRasterization`, and a **256 MB disk cache**
+  (`disk-cache-size`) so repeat visits and sub-resources come from cache.
+- **BrowserView tuning** (`createViewForTab`): `backgroundThrottling: false`
+  keeps the active page's timers/animations at full speed, `webgl: true`, and a
+  solid `setBackgroundColor('#ffffff')` avoids a white-flash repaint on first
+  paint.
+- **No redundant layout work** — `setAutoResize` is now applied **once per view**
+  (tracked in a `WeakSet`) instead of on every tab switch / resize / sidebar
+  toggle.
+- **Cheaper navigation bookkeeping** — the DB module is imported once at the top
+  of `tabs.ipc.ts` (was `require()`d on every event), and `persistTabUrl`
+  **skips repeat writes** for the same URL (common with SPA in-page navigation)
+  via a per-tab last-URL cache that's cleared when the view is destroyed.
+- **Autofill runs once** — the login-tab `did-finish-load` autofill handler now
+  fires a single time and detaches itself, instead of re-running on every SPA
+  re-render.
+
+**Loading progress bar.** A light-blue progress bar is pinned to the bottom edge
+of the address bar (directly under the URL input). The main process synthesizes a
+smooth, monotonic estimate (0→1) from the navigation lifecycle
+(`did-start-loading` → `did-start-navigation` → `dom-ready` →
+`did-frame-finish-load` → `did-stop-loading`) and broadcasts it on the new
+`EVENT_LOAD_PROGRESS` IPC channel; the renderer animates the bar's width and
+fades it out at 100%. The estimator's clamping/monotonic rules are covered by
+`tests/load-progress.test.ts`.
+
 ## Testing & CI
 
 Unit tests live in `tests/` and run with `tsx`:
@@ -305,6 +338,11 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   address-bar logo (light logo on night theme, main logo on light theme) (v0.6.0)
 - ✅ Removed the address-bar page-title text; category right-click Edit/Delete
   menu now opens above the chip instead of being clipped under the taskbar (v0.6.0)
+- ✅ Performance: GPU rasterization/zero-copy switches, 256 MB disk cache,
+  no-throttle active view, one-time `setAutoResize`, cheaper navigation
+  bookkeeping, and one-time autofill (v0.7.0)
+- ✅ Light-blue page-load progress bar under the URL input, driven by an
+  estimated-progress `EVENT_LOAD_PROGRESS` IPC channel (v0.7.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to
