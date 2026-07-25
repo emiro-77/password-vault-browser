@@ -556,6 +556,15 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   ALTER-TABLE migration, and `CREATE TABLE IF NOT EXISTS` is a no-op on an
   existing table). The index is now created inside the migration, after the
   column is added; covered by `tests/db-migration.test.ts` (v1.1.2)
+- ✅ **Connected-site status sync fix**: per-site login status is now WRITTEN
+  and READ under the same canonical account domain. Previously the main process
+  wrote status keyed on the raw eTLD+1 of the opened URL while the sidebar read
+  it under the mapping's login domain, so opening the login page in a second
+  tab made every account show "never used" and the wrong account (last in the
+  list) grabbed the active-tab slot in both tabs. A new
+  `loginPageManager.canonicalAccountDomain(url)` is the single source of truth
+  used by `markLoggedIn`/status emits/tab-close demotion (main) and by
+  `reloadStatusesForUrl` + a canonical `accountDomainRef` (renderer) (v1.1.3)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

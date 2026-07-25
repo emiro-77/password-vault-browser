@@ -14,6 +14,7 @@ import { autofillEngine } from '../services/autofill-engine';
 import { loginEntryManager } from '../services/login-entry-manager';
 import { statusManager } from '../services/status-manager';
 import { hostnameMatches, extractDomain } from '../services/domain-utils';
+import { loginPageManager } from '../services/login-page-manager';
 import { emitStatusChanged } from './tabs.ipc';
 
 export function registerAutofillIpc(): void {
@@ -54,8 +55,10 @@ export function registerAutofillIpc(): void {
         return { success: false, error: 'Autofill failed — hostname mismatch or script error' };
       }
 
-      // Mark as logged in for this domain and refresh the sidebar
-      const domain = extractDomain(url);
+      // Mark as logged in on the CANONICAL account domain (login page + main
+      // site + related URLs share one status) and refresh the sidebar.
+      const rawDomain = extractDomain(url);
+      const domain = loginPageManager.canonicalAccountDomain(url) || rawDomain;
       if (domain) {
         statusManager.markLoggedIn(loginEntryId, domain, tabId);
         emitStatusChanged(domain);

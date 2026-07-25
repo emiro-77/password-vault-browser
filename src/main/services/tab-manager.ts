@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TabInfo, TabType } from '../../shared/types';
 import { getDatabase } from '../db';
 import { extractDomain } from './domain-utils';
+import { loginPageManager } from './login-page-manager';
 import { canGoBack, canGoForward, goBack, goForward, computeViewBounds } from './webcontents-utils';
 
 /** Default chrome height (address bar + bookmarks bar + tab strip) until the
@@ -320,14 +321,19 @@ export class TabManager {
       console.error(`[TabManager] Failed to clear partition data:`, err);
     }
 
-    // 3. Update site_login_status for any login-entry tab
+    // 3. Update site_login_status for any login-entry tab. Status is keyed on
+    //    the CANONICAL account domain (login page + main site + related URLs
+    //    share one status), so demote using that key — not the raw tab domain.
     if (entry.info.loginEntryId && entry.info.domain) {
+      const canonical =
+        loginPageManager.canonicalAccountDomain(entry.info.currentUrl || '') ||
+        entry.info.domain;
       const db = getDatabase();
       db.prepare(`
         UPDATE site_login_status
         SET active_tab_id = NULL, status = 'logged_in'
         WHERE login_entry_id = ? AND domain = ? AND active_tab_id = ?
-      `).run(entry.info.loginEntryId, entry.info.domain, tabId);
+      `).run(entry.info.loginEntryId, canonical, tabId);
     }
 
     // 4. Remove from DB

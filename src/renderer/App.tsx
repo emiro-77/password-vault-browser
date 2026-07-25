@@ -219,6 +219,26 @@ export default function App() {
     setDomainStatuses(merged);
   }, [api, loginEntries]);
 
+  // Resolve the CANONICAL account domain for a URL (via the login-page
+  // connection) and reload statuses under it. Use this after opening/switching
+  // a login tab so the sidebar reads the same status bucket the main process
+  // wrote to — reloading under a raw tab domain shows everything as
+  // "never used" for connected sites.
+  const reloadStatusesForUrl = useCallback(async (url: string | null) => {
+    if (!url) return;
+    let domain: string | null = null;
+    try {
+      const res = await api.loginPages.connection(url);
+      if (res.success && res.data && res.data.scenario !== 'standalone' && res.data.accountDomain) {
+        domain = res.data.accountDomain;
+      }
+    } catch { /* fall back below */ }
+    if (!domain) {
+      try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
+    }
+    loadDomainStatuses(domain);
+  }, [api, loadDomainStatuses]);
+
   const loadAllData = useCallback(async () => {
     await Promise.all([loadLoginEntries(currentDomain), loadBookmarks()]);
   }, [loadLoginEntries, loadBookmarks, currentDomain]);
@@ -231,6 +251,16 @@ export default function App() {
   const accountDomain = (connection && connection.scenario !== 'standalone' && connection.accountDomain)
     ? connection.accountDomain
     : currentDomain;
+
+  // Keep the latest canonical account domain in a ref so long-lived event
+  // handlers (IPC subscriptions registered once) always reload statuses under
+  // the CURRENT canonical key instead of a stale closure value. Without this,
+  // a status-changed event for the login domain would reload under the raw
+  // domain and the sidebar would show everything as "never used".
+  const accountDomainRef = useRef<string | null>(accountDomain);
+  useEffect(() => {
+    accountDomainRef.current = accountDomain;
+  }, [accountDomain]);
 
   // ---- Initial load ----
 
@@ -348,9 +378,8 @@ export default function App() {
         setCurrentDomain(newTab.domain);
         setCurrentTitle('Loading...');
         await api.tabs.switch(newTab.id);
-        if (newTab.domain) {
-          setTimeout(() => loadDomainStatuses(newTab.domain), 200);
-        }
+        // Reload under the CANONICAL account domain of the opened login URL.
+        setTimeout(() => reloadStatusesForUrl(newTab.currentUrl), 200);
       }
       return;
     }
@@ -358,9 +387,8 @@ export default function App() {
     // Step 1: Try autofill on the current tab if hostname matches
     const res = await api.autofill.execute(activeTabId, loginEntryId, currentUrl);
     if (res.success) {
-      if (currentDomain) {
-        loadDomainStatuses(currentDomain);
-      }
+      // Reload under the canonical account domain of the current page.
+      reloadStatusesForUrl(currentUrl);
       return;
     }
 
@@ -397,16 +425,19 @@ export default function App() {
         await api.tabs.switch(newTab.id);
       }
 
-      // Reload domain statuses after login-entry use
-      if (newTab.domain) {
-        setTimeout(() => loadDomainStatuses(newTab.domain), 200);
-      }
+      // Reload domain statuses after login-entry use, under the CANONICAL
+      // account domain of the tab's URL (keeps login/main/related in sync).
+      setTimeout(() => reloadStatusesForUrl(newTab.currentUrl), 200);
     }
-  }, [activeTabId, currentUrl, currentDomain, tabs, api, loadDomainStatuses]);
+  }, [activeTabId, currentUrl, currentDomain, tabs, api, loadDomainStatuses, reloadStatusesForUrl]);
 
   const handleCloseTab = useCallback(async (tabId: string) => {
     await api.tabs.close(tabId);
     setTabs(prev => prev.filter(t => t.id !== tabId));
+
+    // The URL we should reload statuses for after the close (the now-active
+    // tab's URL, or the still-current URL if we closed a background tab).
+    let reloadUrl: string | null = currentUrl;
 
     if (activeTabId === tabId) {
       const remaining = tabs.filter(t => t.id !== tabId);
@@ -417,19 +448,20 @@ export default function App() {
         setCurrentDomain(lastTab.domain);
         setCurrentTitle(lastTab.type === 'guest' ? 'New Tab' : 'Loading...');
         await api.tabs.switch(lastTab.id);
+        reloadUrl = lastTab.currentUrl;
       } else {
         setActiveTabId(null);
         setCurrentUrl('');
         setCurrentDomain(null);
         setCurrentTitle('Vault Browser Desktop');
+        reloadUrl = null;
       }
     }
 
-    // Update domain statuses after tab close
-    if (currentDomain) {
-      setTimeout(() => loadDomainStatuses(currentDomain), 100);
-    }
-  }, [activeTabId, tabs, api, currentDomain, loadDomainStatuses]);
+    // Update domain statuses after tab close, under the CANONICAL account
+    // domain of whatever tab is now active (keeps login/main/related in sync).
+    setTimeout(() => reloadStatusesForUrl(reloadUrl), 100);
+  }, [activeTabId, tabs, api, currentDomain, currentUrl, loadDomainStatuses, reloadStatusesForUrl]);
 
   const handleSwitchTab = useCallback(async (tabId: string) => {
     setActiveTabId(tabId);
@@ -525,10 +557,14 @@ export default function App() {
     });
 
     // Per-site login status changed in the main process (e.g. after autofill).
-    // Refresh the sidebar if it concerns the current domain (or is global).
+    // The main process now emits the CANONICAL account domain, so refresh the
+    // sidebar when the event concerns our canonical domain (or is global).
+    // Always reload under the canonical key (accountDomainRef), never the raw
+    // current domain — otherwise the sidebar reads the wrong status bucket.
     const unsub4 = api.on('event:status-changed', (data: any) => {
-      if (!data?.domain || data.domain === currentDomain) {
-        loadDomainStatuses(currentDomain);
+      const canonical = accountDomainRef.current;
+      if (!data?.domain || data.domain === canonical || data.domain === currentDomain) {
+        loadDomainStatuses(canonical);
       }
     });
 

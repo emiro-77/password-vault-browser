@@ -252,6 +252,24 @@ export class LoginPageManager {
   }
 
   /**
+   * Return the CANONICAL account domain that per-site status, accounts and
+   * categories must be keyed on for a given URL.
+   *
+   * This is the single source of truth used by BOTH the renderer (via
+   * resolveConnection → accountDomain) and the main process (status writes),
+   * so a login page, its main website and every related URL all read AND write
+   * status under the same key. Using the raw eTLD+1 for writes while the
+   * sidebar reads under the login domain is exactly what caused statuses to
+   * appear reset and the wrong account to hold the active-tab slot.
+   *
+   * Falls back to the raw eTLD+1 when the URL is not part of any mapping.
+   */
+  canonicalAccountDomain(url: string): string {
+    const conn = this.resolveConnection(url);
+    return conn.accountDomain || extractDomain(url) || '';
+  }
+
+  /**
    * Decide whether selecting `loginEntryId` while on `currentUrl` should open a
    * saved login page. Returns the URL to open, or null to fall back to the
    * default (autofill the current page).

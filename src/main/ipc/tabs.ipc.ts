@@ -8,6 +8,7 @@ import { tabManager } from '../services/tab-manager';
 import { autofillEngine } from '../services/autofill-engine';
 import { statusManager } from '../services/status-manager';
 import { loginEntryManager } from '../services/login-entry-manager';
+import { loginPageManager } from '../services/login-page-manager';
 import { normalizeUrlOrSearch } from '../services/domain-utils';
 import { extractHostname, extractDomain } from '../services/domain-utils';
 import { canGoBack, canGoForward } from '../services/webcontents-utils';
@@ -55,8 +56,12 @@ export function registerTabsIpc(): void {
       const { loginEntryId, url } = payload;
       const normalizedUrl = normalizeUrlOrSearch(url);
 
-      // Check if there's already an active tab for this login+domain
+      // Check if there's already an active tab for this login+domain.
+      // Dedup uses the RAW tab domain (tabs store their raw domain), but status
+      // is keyed on the CANONICAL account domain so it stays in sync across the
+      // login page, main site and related URLs.
       const domain = extractDomain(normalizedUrl);
+      const accountDomain = loginPageManager.canonicalAccountDomain(normalizedUrl) || domain;
       if (domain) {
         const existingTab = tabManager.findTabByLoginAndDomain(loginEntryId, domain);
         if (existingTab) {
@@ -64,8 +69,10 @@ export function registerTabsIpc(): void {
           // any previously-active account on this domain becomes "used" and
           // this one takes over the single active-tab slot.
           await tabManager.switchToTab(existingTab.id);
-          statusManager.markLoggedIn(loginEntryId, domain, existingTab.id);
-          emitStatusChanged(domain);
+          if (accountDomain) {
+            statusManager.markLoggedIn(loginEntryId, accountDomain, existingTab.id);
+            emitStatusChanged(accountDomain);
+          }
           return { success: true, data: { ...existingTab, switched: true } };
         }
       }
@@ -104,9 +111,12 @@ export function registerTabsIpc(): void {
             passwordSecretRef: secretRef,
           });
 
-          // Mark as logged in and notify the renderer to refresh the sidebar
-          statusManager.markLoggedIn(loginEntryId, domain, tabInfo.id);
-          emitStatusChanged(domain);
+          // Mark as logged in on the CANONICAL account domain (so the login
+          // page, main site and related URLs share one status) and notify the
+          // renderer to refresh the sidebar.
+          const canonical = loginPageManager.canonicalAccountDomain(currentUrl) || domain;
+          statusManager.markLoggedIn(loginEntryId, canonical, tabInfo.id);
+          emitStatusChanged(canonical);
         }
       };
       view.webContents.on('did-finish-load', onFirstLoad);
