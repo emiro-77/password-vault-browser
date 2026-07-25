@@ -575,6 +575,23 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   `tests/error-page.test.ts` (v1.1.4)
 - ✅ **Logo position**: the app logo now sits at the far right of the address
   bar, to the right of the ⚙ Settings button (v1.1.4)
+- ✅ **Multi-tab active status (derived from live tabs)**: two tabs on the SAME
+  site each logged in with a DIFFERENT account now BOTH show as the active tab —
+  and switching between them no longer flips every account to "never used". The
+  root cause was two-fold: (1) `markLoggedIn` demoted every *other* account on
+  the domain and the schema stored a single `active_tab_id` per (account,
+  domain), so two live tabs could never both be "active"; and (2) a tab's
+  in-memory `currentUrl` went stale after a redirect/SPA navigation, so the
+  canonical-domain key computed for the live tab no longer matched the stored
+  status key (→ everything read as "never used"). Fix: "active" is now DERIVED
+  from the live open tabs via `tabManager.getActiveAccountKeys()` — a set of
+  unique `${loginEntryId}::${canonicalAccountDomain}` hashes (one per open
+  login tab), overlaid in `computeCurrentStatus`. `markLoggedIn` no longer
+  demotes other accounts; `tabManager.syncTabUrl()` (wired into every
+  `did-navigate`/`did-navigate-in-page`) keeps each tab's URL — and therefore
+  its live key — accurate; and the Settings `changeStatus`/`clearTimer` guards
+  now protect any account with a *live* tab instead of a stale `active_tab_id`.
+  Covered by new multi-tab cases in `tests/expiry-logic.test.ts` (v1.1.5)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

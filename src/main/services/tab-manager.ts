@@ -361,6 +361,24 @@ export class TabManager {
   }
 
   /**
+   * Sync a tab's in-memory URL/domain from an actual webview navigation
+   * (did-navigate / did-navigate-in-page). CRITICAL for the derived active-tab
+   * status: `getActiveAccountKeys()` computes each open tab's canonical account
+   * domain from `entry.info.currentUrl`. If that stays stale (e.g. after a
+   * login-page → main-site redirect, or any in-page SPA navigation), the live
+   * key no longer matches the stored status key and every account on the domain
+   * wrongly computes to "never used". Keeping the in-memory URL in lock-step
+   * with the real page fixes that.
+   */
+  syncTabUrl(tabId: string, url: string): void {
+    const entry = this.tabs.get(tabId);
+    if (!entry) return;
+    if (entry.info.currentUrl === url) return;
+    entry.info.currentUrl = url;
+    entry.info.domain = extractDomain(url) || null;
+  }
+
+  /**
    * Navigate the active tab to a URL.
    */
   navigateActiveTab(url: string): void {
@@ -420,16 +438,46 @@ export class TabManager {
   /**
    * Find a tab that has the given login entry active on the given domain.
    * Used to deduplicate tabs (switch instead of creating new).
+   *
+   * Matches on the CANONICAL account domain (via each tab's current URL), so a
+   * tab opened on the login page and the request coming from the main/related
+   * site still dedupe to the same account+site. Falls back to the raw domain.
    */
   findTabByLoginAndDomain(loginEntryId: string, domain: string): TabInfo | null {
     for (const [, entry] of this.tabs) {
-      if (entry.info.loginEntryId === loginEntryId &&
-          entry.info.domain === domain &&
-          entry.view !== null) {
+      if (entry.info.loginEntryId !== loginEntryId || entry.view === null) continue;
+      const canonical =
+        loginPageManager.canonicalAccountDomain(entry.info.currentUrl || '') ||
+        entry.info.domain;
+      if (canonical === domain || entry.info.domain === domain) {
         return { ...entry.info };
       }
     }
     return null;
+  }
+
+  /**
+   * Return the set of currently-OPEN login-entry tabs as canonical
+   * "account keys" — `${loginEntryId}::${canonicalAccountDomain}`.
+   *
+   * This is the LIVE source of truth for which accounts are "active tab open":
+   * an account is active on a domain iff some open tab holds it. Because the key
+   * includes the account id, TWO tabs on the SAME domain with DIFFERENT accounts
+   * both count as active — which the single stored `active_tab_id` per
+   * (account,domain) row could never represent. Status reads overlay this set so
+   * every live tab's account shows as active, and closing one tab only demotes
+   * that account.
+   */
+  getActiveAccountKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const [, entry] of this.tabs) {
+      const { loginEntryId, currentUrl, domain } = entry.info;
+      if (!loginEntryId) continue;
+      const canonical =
+        loginPageManager.canonicalAccountDomain(currentUrl || '') || domain || '';
+      if (canonical) keys.add(`${loginEntryId}::${canonical}`);
+    }
+    return keys;
   }
 
   /**

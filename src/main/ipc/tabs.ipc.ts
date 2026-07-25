@@ -388,6 +388,12 @@ function setupViewEvents(tabId: string, view: BrowserView): void {
 const lastPersistedUrl = new Map<string, string>();
 
 function persistTabUrl(tabId: string, url: string): void {
+  // Always keep the tab manager's in-memory URL in sync with the real page —
+  // even when the URL is unchanged we cheaply short-circuit inside syncTabUrl.
+  // This is what keeps getActiveAccountKeys() (derived active-tab status)
+  // accurate after redirects / SPA navigations.
+  tabManager.syncTabUrl(tabId, url);
+
   if (lastPersistedUrl.get(tabId) === url) return;
   lastPersistedUrl.set(tabId, url);
   try {
