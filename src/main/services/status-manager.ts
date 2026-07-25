@@ -27,8 +27,16 @@ export class StatusManager {
   /**
    * Get status for all login entries on a specific domain.
    * Returns current computed status (handles expiry).
+   *
+   * `focusedTabId` selects the "active" interpretation (see
+   * computeCurrentStatus): pass the currently-focused tab id for the VAULT
+   * SIDEBAR (at most one "Active tab"), or omit it for SETTINGS › Site accounts
+   * (every open-tab account reads active).
    */
-  getForDomain(domain: string): (SiteLoginStatus & { loginLabel: string; loginUsername: string })[] {
+  getForDomain(
+    domain: string,
+    focusedTabId?: string | null,
+  ): (SiteLoginStatus & { loginLabel: string; loginUsername: string })[] {
     const db = getDatabase();
     this.expireStale(Date.now());
     const rows = db.prepare(`
@@ -42,7 +50,7 @@ export class StatusManager {
     const now = Date.now();
 
     return rows.map(r => {
-      const currentStatus = this.computeCurrentStatus(r, now);
+      const currentStatus = this.computeCurrentStatus(r, now, focusedTabId);
 
       return {
         id: r.id,
@@ -386,18 +394,28 @@ export class StatusManager {
    * Compute the effective status considering the 24h expiry window and the
    * STORED active-tab link. Internal helper.
    *
-   * Rules:
+   * `focusedTabId` controls how "active" is interpreted — the two consumers
+   * want DIFFERENT views of the same stored data:
+   *
+   * - Vault sidebar (focusedTabId provided): shows which account is active in
+   *   the ONE currently-focused tab. Only the row whose active_tab_id equals
+   *   focusedTabId is "active_tab_open"; every OTHER open-tab account on the
+   *   domain shows as "used". So the sidebar always has at most one "Active
+   *   tab", and switching tabs moves it (never resets to never_used).
+   *
+   * - Settings › Site accounts (focusedTabId === undefined): shows every
+   *   account currently open in ANY tab. Each row that holds an active_tab_id
+   *   is "active_tab_open" — so several accounts can read active at once when
+   *   multiple tabs on the same URL are open.
+   *
+   * Rules (both modes):
    * - After 24h from the first login, any active/used/logged_in status resets
    *   to "never_used".
-   * - If this row holds an active tab (its own stored `active_tab_id`) ->
-   *   "active_tab_open". Because each (account, domain) row owns its own
-   *   active_tab_id, MULTIPLE accounts on the same domain can be active at once
-   *   (one per open tab) — no demotion of the others.
    * - A previously logged-in account whose tab has closed (active_tab_id NULL)
    *   is still within its window -> "used" (red).
    * - Otherwise the stored status stands.
    */
-  private computeCurrentStatus(row: any, nowMs: number): LoginStatus {
+  private computeCurrentStatus(row: any, nowMs: number, focusedTabId?: string | null): LoginStatus {
     // 24h window check: once the window lapses, the account is "never_used".
     if (row.logged_in_until) {
       const untilMs = new Date(row.logged_in_until).getTime();
@@ -406,9 +424,14 @@ export class StatusManager {
       }
     }
 
-    // Active iff THIS row currently holds an open tab (stored fact).
     if (row.active_tab_id) {
-      return 'active_tab_open';
+      // Sidebar mode: only the focused tab's account is "active"; the other
+      // open-tab accounts are "used". Settings mode (focusedTabId undefined):
+      // every open-tab account is "active".
+      if (focusedTabId === undefined || row.active_tab_id === focusedTabId) {
+        return 'active_tab_open';
+      }
+      return 'used';
     }
 
     // A previously logged-in/active account whose tab has closed is "used"

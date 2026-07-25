@@ -473,13 +473,17 @@ export default function App() {
     }
     await api.tabs.switch(tabId);
 
-    // Reload domain statuses for the new tab's domain
-    if (tab?.domain) {
-      loadDomainStatuses(tab.domain);
+    // Reload domain statuses for the new tab, keyed on the CANONICAL account
+    // domain (login page + main site + related URLs share one bucket) — NOT
+    // the raw tab.domain. Reading under the raw domain is exactly what made
+    // every account show "never used" after a tab switch. reloadStatusesForUrl
+    // resolves the canonical key from the tab's URL before loading.
+    if (tab?.currentUrl && tab.currentUrl !== 'about:blank') {
+      reloadStatusesForUrl(tab.currentUrl);
     } else {
       setDomainStatuses(loginEntries.map(e => ({ entry: e, status: 'never_used', statusInfo: null })));
     }
-  }, [tabs, api, loadDomainStatuses, loginEntries]);
+  }, [tabs, api, reloadStatusesForUrl, loginEntries]);
 
   const handleNavigate = useCallback(async (input: string) => {
     // Normalize raw address-bar input: bare domains get https://, and

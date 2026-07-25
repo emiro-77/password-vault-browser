@@ -93,16 +93,29 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [clearCache, setClearCache] = useState(true);
   const [clearCookies, setClearCookies] = useState(true);
   const [clearStorage, setClearStorage] = useState(true);
+  // Vault wipe is destructive, so it defaults OFF and must be opted into.
+  const [clearVault, setClearVault] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [clearResult, setClearResult] = useState<string | null>(null);
 
   const handleClearData = useCallback(async () => {
+    // Wiping the vault is irreversible — confirm before proceeding.
+    if (clearVault) {
+      const ok = window.confirm(
+        'This will permanently delete ALL saved accounts (and their passwords), ' +
+        'bookmarks, saved login pages, per-site status and categories. This cannot ' +
+        'be undone. Continue?'
+      );
+      if (!ok) return;
+    }
+
     setClearing(true);
     setClearResult(null);
     const res = await api.settings.clearData({
       cache: clearCache,
       cookies: clearCookies,
       storage: clearStorage,
+      vault: clearVault,
     });
     setClearing(false);
     if (res.success && res.data) {
@@ -111,10 +124,15 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           ? `Cleared: ${res.data.cleared.join(', ')}.`
           : 'Nothing selected to clear.'
       );
+      // Refresh the Site accounts list so wiped accounts disappear immediately.
+      if (clearVault) {
+        setClearVault(false);
+        await loadAccounts();
+      }
     } else {
       setClearResult(`Failed to clear data: ${res.error || 'unknown error'}`);
     }
-  }, [api, clearCache, clearCookies, clearStorage]);
+  }, [api, clearCache, clearCookies, clearStorage, clearVault, loadAccounts]);
 
   // ---- Data export / import (encrypted backup) ----
   const [transferMode, setTransferMode] = useState<null | 'export' | 'import'>(null);
@@ -263,9 +281,8 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             <div id="settings-data">
               <h2 className="settings-section-title">Data management</h2>
               <p className="settings-section-desc">
-                Clear the browser's cache and stored data. This does not delete
-                your saved accounts — only cached files, cookies and site
-                storage.
+                Clear browsing data (cache, cookies, site storage) and/or
+                permanently delete all of your saved vault data.
               </p>
 
               <div className="clear-options">
@@ -281,13 +298,21 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                   <input type="checkbox" checked={clearStorage} onChange={e => setClearStorage(e.target.checked)} />
                   <span><strong>Site storage</strong> — localStorage, IndexedDB, service workers</span>
                 </label>
+                <label className="clear-option clear-option-danger">
+                  <input type="checkbox" checked={clearVault} onChange={e => setClearVault(e.target.checked)} />
+                  <span>
+                    <strong>Vault data</strong> — permanently delete ALL saved
+                    accounts (and passwords), bookmarks, saved login pages,
+                    per-site status &amp; categories. This cannot be undone.
+                  </span>
+                </label>
               </div>
 
               <div className="data-actions-row">
                 <button
                   className="modal-btn danger"
                   onClick={handleClearData}
-                  disabled={clearing || (!clearCache && !clearCookies && !clearStorage)}
+                  disabled={clearing || (!clearCache && !clearCookies && !clearStorage && !clearVault)}
                 >
                   {clearing ? 'Clearing…' : 'Clear selected data'}
                 </button>

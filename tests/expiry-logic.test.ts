@@ -34,7 +34,15 @@ interface StatusRow {
 }
 
 // Faithful mirror of StatusManager.computeCurrentStatus(row, nowMs).
-function computeCurrentStatus(row: StatusRow, nowMs: number): LoginStatus {
+// Mirror of StatusManager.computeCurrentStatus(row, nowMs, focusedTabId).
+//
+// `focusedTabId` selects the "active" interpretation:
+//  - VAULT SIDEBAR (focusedTabId provided): only the focused tab's account is
+//    "active_tab_open"; other open-tab accounts read "used" -> at most ONE
+//    active tab shown.
+//  - SETTINGS › Site accounts (focusedTabId === undefined): every open-tab
+//    account is "active_tab_open" -> multiple active tabs shown.
+function computeCurrentStatus(row: StatusRow, nowMs: number, focusedTabId?: string | null): LoginStatus {
   // 24h window check: once the window lapses, the account is "never_used".
   if (row.logged_in_until) {
     const untilMs = new Date(row.logged_in_until).getTime();
@@ -42,9 +50,11 @@ function computeCurrentStatus(row: StatusRow, nowMs: number): LoginStatus {
       return 'never_used';
     }
   }
-  // Active iff THIS row currently holds an open tab (stored fact).
   if (row.active_tab_id) {
-    return 'active_tab_open';
+    if (focusedTabId === undefined || row.active_tab_id === focusedTabId) {
+      return 'active_tab_open';
+    }
+    return 'used';
   }
   // A previously logged-in/active account whose tab has closed -> "used".
   if (row.status === 'logged_in' || row.status === 'active_tab_open') {
@@ -75,30 +85,47 @@ function test_logged_in_without_tab_becomes_used() {
   console.log('  ✓ superseded logged-in account (tab closed) -> used');
 }
 
-// THE core regression: two tabs on the SAME domain with DIFFERENT accounts must
-// BOTH read as active. In the stored model each row owns its own active_tab_id,
-// so no demotion happens and both compute to active_tab_open.
-function test_two_accounts_same_domain_both_active() {
+// SETTINGS view: two tabs on the SAME domain with DIFFERENT accounts must BOTH
+// read as active (focusedTabId omitted -> every open-tab account is active).
+function test_settings_shows_all_open_tabs_active() {
   const now = Date.now();
   const rowA: StatusRow = { status: 'logged_in', logged_in_until: future(), active_tab_id: 'tab-1' };
   const rowB: StatusRow = { status: 'logged_in', logged_in_until: future(), active_tab_id: 'tab-2' };
-  assert(computeCurrentStatus(rowA, now) === 'active_tab_open', 'account 1 (tab 1) is active');
-  assert(computeCurrentStatus(rowB, now) === 'active_tab_open', 'account 2 (tab 2) is active');
-  console.log('  ✓ two tabs / two accounts / same domain -> BOTH active_tab_open');
+  // No focusedTabId -> Settings interpretation.
+  assert(computeCurrentStatus(rowA, now) === 'active_tab_open', 'Settings: account 1 active');
+  assert(computeCurrentStatus(rowB, now) === 'active_tab_open', 'Settings: account 2 active');
+  console.log('  ✓ Settings › Site accounts -> ALL open-tab accounts active');
 }
 
-// Switching between the two tabs must NOT change either row's active_tab_id,
-// so neither account flips to used/never_used on switch.
-function test_switching_tabs_keeps_both_active() {
+// VAULT SIDEBAR view: with two tabs open, ONLY the focused tab's account is
+// "Active tab"; the other open-tab account reads "used". Exactly one active.
+function test_sidebar_shows_only_focused_tab_active() {
   const now = Date.now();
-  // Switching tabs does not mutate active_tab_id at all -> both stay active.
   const rowA: StatusRow = { status: 'logged_in', logged_in_until: future(), active_tab_id: 'tab-1' };
   const rowB: StatusRow = { status: 'logged_in', logged_in_until: future(), active_tab_id: 'tab-2' };
-  assert(computeCurrentStatus(rowA, now) === 'active_tab_open',
-    'switching to tab 1 keeps account 1 active');
-  assert(computeCurrentStatus(rowB, now) === 'active_tab_open',
-    'switching to tab 1 keeps account 2 active (not reset to never_used)');
-  console.log('  ✓ switching tabs never resets accounts to never_used');
+  // Focused on tab 1.
+  assert(computeCurrentStatus(rowA, now, 'tab-1') === 'active_tab_open',
+    'Sidebar (focus tab 1): account 1 is the Active tab');
+  assert(computeCurrentStatus(rowB, now, 'tab-1') === 'used',
+    'Sidebar (focus tab 1): account 2 is "used", not a second Active tab');
+  console.log('  ✓ Sidebar -> ONLY the focused tab account is Active tab');
+}
+
+// Switching the focused tab moves the single "Active tab" to the other
+// account — it must NOT reset either account to never_used.
+function test_sidebar_switch_moves_single_active() {
+  const now = Date.now();
+  const rowA: StatusRow = { status: 'logged_in', logged_in_until: future(), active_tab_id: 'tab-1' };
+  const rowB: StatusRow = { status: 'logged_in', logged_in_until: future(), active_tab_id: 'tab-2' };
+  // Now focus tab 2.
+  assert(computeCurrentStatus(rowA, now, 'tab-2') === 'used',
+    'Sidebar (focus tab 2): account 1 is now "used"');
+  assert(computeCurrentStatus(rowB, now, 'tab-2') === 'active_tab_open',
+    'Sidebar (focus tab 2): account 2 is now the Active tab');
+  // Neither ever computes to never_used while a tab holds it in-window.
+  assert(computeCurrentStatus(rowA, now, 'tab-2') !== 'never_used', 'account 1 not never_used on switch');
+  assert(computeCurrentStatus(rowB, now, 'tab-2') !== 'never_used', 'account 2 not never_used on switch');
+  console.log('  ✓ Sidebar switch moves the single Active tab (no never_used reset)');
 }
 
 // Closing tab 2 clears ONLY account 2's active_tab_id; account 1 stays active.
@@ -172,8 +199,9 @@ function runAllTests() {
   try {
     test_active_when_row_holds_tab();
     test_logged_in_without_tab_becomes_used();
-    test_two_accounts_same_domain_both_active();
-    test_switching_tabs_keeps_both_active();
+    test_settings_shows_all_open_tabs_active();
+    test_sidebar_shows_only_focused_tab_active();
+    test_sidebar_switch_moves_single_active();
     test_closing_one_tab_only_demotes_that_account();
     test_resets_to_never_used_after_24h();
     test_resets_after_many_days();

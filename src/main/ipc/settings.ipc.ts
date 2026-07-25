@@ -28,7 +28,7 @@ import { loginEntryManager } from '../services/login-entry-manager';
 import { statusManager } from '../services/status-manager';
 import { sessionManager } from '../services/session-manager';
 import { loginPageManager } from '../services/login-page-manager';
-import { buildEncryptedExport, importEncryptedBackup } from '../services/vault-transfer';
+import { buildEncryptedExport, importEncryptedBackup, wipeAllVaultData } from '../services/vault-transfer';
 
 export function registerSettingsIpc(): void {
   // ---- Site account management ----
@@ -124,8 +124,11 @@ export function registerSettingsIpc(): void {
   ipcMain.handle(IPC_CHANNELS.SETTINGS_CLEAR_DATA, async (_event, req: ClearDataRequest): Promise<IpcResponse<ClearDataResult>> => {
     try {
       const request: ClearDataRequest = req || {};
-      // Default: clear everything if the caller passed no specific flags.
-      const clearAll = !request.cache && !request.cookies && !request.storage;
+      // Default (no flags at all): clear the BROWSER data (cache/cookies/
+      // storage) but NEVER the vault — wiping saved accounts must be an
+      // explicit opt-in (request.vault === true), never a side effect of the
+      // "clear everything" default.
+      const clearAll = !request.cache && !request.cookies && !request.storage && !request.vault;
 
       const cleared: string[] = [];
 
@@ -163,6 +166,22 @@ export function registerSettingsIpc(): void {
       // Also clear the isolated tab partitions via the session manager so any
       // still-open sessions are fully wiped.
       try { await sessionManager.clearAllSessions(); } catch { /* best-effort */ }
+
+      // Vault wipe (explicit opt-in only): permanently delete saved accounts,
+      // bookmarks, saved login pages, per-site status, categories & site rules.
+      if (request.vault) {
+        try {
+          const { tabManager } = await import('../services/tab-manager');
+          // Close every open tab first — they reference accounts/URLs that are
+          // about to be deleted, so leaving them open would show stale state.
+          await tabManager.closeAllTabs().catch(() => {});
+        } catch { /* tabManager may not be ready */ }
+
+        const wiped = await wipeAllVaultData();
+        cleared.push(
+          `vault data (${wiped.accounts} account(s), ${wiped.bookmarks} bookmark(s), ${wiped.loginPages} saved login page(s))`
+        );
+      }
 
       return { success: true, data: { cleared } };
     } catch (err: any) {

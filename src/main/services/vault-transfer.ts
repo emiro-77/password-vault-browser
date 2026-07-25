@@ -279,6 +279,57 @@ export async function importEncryptedBackup(
 }
 
 /**
+ * Permanently delete ALL vault data — saved accounts (and their stored
+ * passwords), bookmarks, saved login pages, per-site status, categories and
+ * site rules. This is the destructive "clear everything" used by Settings ›
+ * Data management. Browser cache/cookies/storage are cleared separately by the
+ * settings IPC handler; this only touches the vault DB + credential store.
+ *
+ * Returns counts of the main record types removed for a user-facing summary.
+ */
+export async function wipeAllVaultData(): Promise<{ accounts: number; bookmarks: number; loginPages: number }> {
+  const db = getDatabase();
+
+  // Count what we're about to remove (for the result message).
+  const count = (table: string): number => {
+    try { return (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as any).n as number; }
+    catch { return 0; }
+  };
+  const accounts = count('login_entries');
+  const bookmarks = count('bookmarks');
+  const loginPages = count('login_page_mappings');
+
+  // 1) Remove every credential from secure storage first (best-effort) so no
+  //    orphaned secrets linger after the DB rows are gone.
+  try {
+    const refs = db.prepare('SELECT password_secret_ref FROM login_entries').all() as any[];
+    for (const r of refs) {
+      await deleteCredential(r.password_secret_ref).catch(() => {});
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  // 2) Wipe every vault table atomically. Order respects FKs (children first).
+  //    `tabs` is intentionally left alone — open tabs are runtime state, not
+  //    saved vault data, and are cleaned up by the tab manager on close/quit.
+  const wipe = db.transaction(() => {
+    db.exec(`
+      DELETE FROM login_page_mappings;
+      DELETE FROM category_accounts;
+      DELETE FROM categories;
+      DELETE FROM bookmarks;
+      DELETE FROM site_login_status;
+      DELETE FROM site_rules;
+      DELETE FROM login_entries;
+    `);
+  });
+  wipe();
+
+  return { accounts, bookmarks, loginPages };
+}
+
+/**
  * Generic column-driven INSERT for the "carry rows verbatim" tables. Skips
  * unknown columns defensively so a slightly-newer payload won't hard-crash.
  */

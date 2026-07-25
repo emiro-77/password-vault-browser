@@ -609,6 +609,32 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   dead derived-key helper (`getActiveAccountKeys`) was removed; `syncTabUrl`
   stays to keep tab dedup / close accurate. Multi-tab cases in
   `tests/expiry-logic.test.ts` updated to the stored model (v1.1.6)
+- ✅ **Unique active tab in the sidebar, all-active in Settings + Clear-Data
+  vault wipe (v1.1.7)**: three related fixes.
+  (a) *"Never used" on tab switch* — `handleSwitchTab` reloaded statuses using
+  the RAW `tab.domain` instead of the canonical account domain, so it read the
+  wrong status bucket and every account flipped to "never used". It now reloads
+  via `reloadStatusesForUrl(tab.currentUrl)`, which resolves the canonical
+  account domain (the same key statuses are written under).
+  (b) *One active tab in the sidebar, many in Settings* — the Vault sidebar
+  must show exactly ONE "Active Tab" (the account in the currently-focused
+  tab), while Settings > Site Accounts must list ALL active tabs (several tabs
+  open on the same login page). `computeCurrentStatus(row, nowMs, focusedTabId?)`
+  now takes an optional `focusedTabId`: the sidebar path
+  (`STATUS_GET_FOR_DOMAIN`) passes `tabManager.getActiveTabId()`, so only the
+  row whose `active_tab_id` matches the focused tab is `active_tab_open` and the
+  rest are `used` → exactly one active; the Settings path
+  (`getForEntryAndDomain`/`getAll`) omits `focusedTabId`, so every row with an
+  `active_tab_id` stays `active_tab_open` → all active. Covered by new
+  sidebar-vs-Settings cases in `tests/expiry-logic.test.ts`.
+  (c) *Clear Data now wipes the vault* — "Clear Data" previously only cleared
+  browser cache/cookies/storage and left every account, bookmark and saved
+  login page intact. A new opt-in **"Vault data"** checkbox (with a confirm
+  dialog) calls `wipeAllVaultData()`, which best-effort deletes stored
+  credentials then atomically clears `login_page_mappings`,
+  `category_accounts`, `categories`, `bookmarks`, `site_login_status`,
+  `site_rules` and `login_entries`. It is explicit-only (never part of the
+  default clear-all) to avoid accidental data loss (v1.1.7)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

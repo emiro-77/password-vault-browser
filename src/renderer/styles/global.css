@@ -1813,6 +1813,21 @@ html, body {
   color: var(--text-primary);
 }
 
+/* The vault-wipe option is destructive — give it a red border + tint so it
+ * clearly reads as dangerous and distinct from the browser-data options. */
+.clear-option-danger {
+  border-color: var(--danger, #d9534f);
+  align-items: flex-start;
+}
+
+.clear-option-danger:hover {
+  background: rgba(217, 83, 79, 0.08);
+}
+
+.clear-option-danger input {
+  margin-top: 2px;
+}
+
 .clear-result {
   margin-top: 14px;
   padding: 10px 14px;

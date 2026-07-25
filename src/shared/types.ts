@@ -195,6 +195,8 @@ export interface ClearDataRequest {
   cache?: boolean;              // HTTP cache
   cookies?: boolean;            // cookies + site storage (localStorage, etc.)
   storage?: boolean;            // IndexedDB / service workers / caches
+  vault?: boolean;             // saved accounts, bookmarks, saved login pages,
+                               // per-site status, categories & site rules
 }
 
 export interface ClearDataResult {
