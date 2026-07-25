@@ -10,7 +10,7 @@
 // 4. Creates an initial guest tab
 // 5. Handles app lifecycle (close, window events)
 
-import { app, BrowserWindow, screen, ipcMain, nativeTheme } from 'electron';
+import { app, BrowserWindow, screen, ipcMain, nativeTheme, dialog } from 'electron';
 import * as path from 'path';
 import { initDatabase, closeDatabase } from './db';
 import { initCredentialStore } from './services/credential-store';
@@ -146,7 +146,20 @@ app.whenReady().then(async () => {
     await initializeServices();
     createMainWindow();
   } catch (err) {
+    // Surface the failure loudly. A silent app.quit() here is what causes the
+    // "nothing happened — no window, no error" symptom in packaged builds when
+    // a native module (e.g. better-sqlite3) fails to load. Show a dialog so the
+    // failure is visible and diagnosable before we exit.
+    const detail = err instanceof Error ? (err.stack || err.message) : String(err);
     console.error('[Main] Fatal error during initialization:', err);
+    try {
+      dialog.showErrorBox(
+        `${APP_NAME} failed to start`,
+        `The application could not initialize and will now close.\n\n${detail}`
+      );
+    } catch {
+      /* dialog may be unavailable in some edge cases — ignore */
+    }
     app.quit();
   }
 });

@@ -544,6 +544,12 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   Standalone scenarios; Settings adds an All-Sites/Login-Sites filter, a visual
   main+related URL map with `+n more` overflow, and an in-place mapping editor
   (change main URL, add/remove related URLs, toggle restriction) (v1.1.0)
+- ✅ **Packaged Windows build fix**: `better-sqlite3` native binary is now
+  unpacked from `app.asar` (`asarUnpack`) and rebuilt against Electron's ABI in
+  CI (`electron-builder install-app-deps`), and a fatal init error now shows a
+  visible `dialog.showErrorBox` instead of a silent `app.quit()` — fixes the
+  installer/portable `.exe` launching with "nothing happened, no window, no
+  error" (v1.1.1)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to
