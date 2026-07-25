@@ -133,15 +133,6 @@ export default function AddressBar({
         🔑
       </button>
 
-      {/* App logo — light logo on the dark (night) theme, main logo on the light theme */}
-      <img
-        className="app-logo"
-        src={theme === 'light' ? './vault-browser-main.png' : './vault-browser-light.png'}
-        alt="Vault Browser Desktop"
-        title="Vault Browser Desktop"
-        draggable={false}
-      />
-
       {/* Light / Night theme toggle */}
       <ThemeToggle theme={theme} onToggle={onToggleTheme} />
 
@@ -154,6 +145,16 @@ export default function AddressBar({
       >
         ⚙
       </button>
+
+      {/* App logo — pinned to the rightmost position (right of Settings).
+          Light logo on the dark (night) theme, main logo on the light theme. */}
+      <img
+        className="app-logo"
+        src={theme === 'light' ? './vault-browser-main.png' : './vault-browser-light.png'}
+        alt="Vault Browser Desktop"
+        title="Vault Browser Desktop"
+        draggable={false}
+      />
 
       {/* Page-load progress bar — light blue, stuck to the bottom edge of the
           address bar (directly under the URL input row). Hidden when idle. */}

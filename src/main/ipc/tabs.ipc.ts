@@ -12,6 +12,12 @@ import { loginPageManager } from '../services/login-page-manager';
 import { normalizeUrlOrSearch } from '../services/domain-utils';
 import { extractHostname, extractDomain } from '../services/domain-utils';
 import { canGoBack, canGoForward } from '../services/webcontents-utils';
+import {
+  describeNetError,
+  mapHttpStatus,
+  renderErrorPage,
+  errorPageDataUrl,
+} from '../services/error-page';
 import { AUTOFILL_PRELOAD } from '../../shared/constants';
 import { getDatabase } from '../db';
 import * as path from 'path';
@@ -277,15 +283,68 @@ function setupViewEvents(tabId: string, view: BrowserView): void {
   };
   const resetProgress = () => { progress = 0; };
 
-  // URL changed (full navigation + in-page/SPA navigation)
-  wc.on('did-navigate', (_event, url) => {
+  // URL changed (full navigation + in-page/SPA navigation).
+  // `did-navigate` also reports the main-frame HTTP status code. When the
+  // server returns a hard error status (>=400) we render our own error page —
+  // but ONLY if the server sent no meaningful body of its own (many sites
+  // serve custom 404/503 pages we should keep). We can't read the body here, so
+  // we heuristically override only for statuses that commonly return an empty
+  // body from proxies/load-balancers (502/503/504) plus 5xx; 4xx pages are far
+  // more likely to carry real content and are left untouched.
+  wc.on('did-navigate', (_event, url, httpResponseCode) => {
     emitUrl(url);
     persistTabUrl(tabId, url);
+
+    const status = typeof httpResponseCode === 'number' ? httpResponseCode : 0;
+    if (status === 502 || status === 503 || status === 504) {
+      // Give the site a moment to paint its own body; if the document is empty
+      // (no visible text), show our branded error page instead of a blank tab.
+      setTimeout(() => {
+        if (wc.isDestroyed()) return;
+        wc.executeJavaScript('document.body ? document.body.innerText.trim().length : 0', true)
+          .then((len: number) => {
+            if (!wc.isDestroyed() && (!len || len < 2)) {
+              const info = mapHttpStatus(status);
+              const html = renderErrorPage({
+                title: info.title,
+                message: info.message,
+                hint: info.hint,
+                code: `HTTP ${status}`,
+                failedUrl: url,
+              });
+              wc.loadURL(errorPageDataUrl(html));
+            }
+          })
+          .catch(() => { /* page gone / cross-origin — leave as-is */ });
+      }, 400);
+    }
   });
 
   wc.on('did-navigate-in-page', (_event, url) => {
     emitUrl(url);
     persistTabUrl(tabId, url);
+  });
+
+  // Network-level load failure on the MAIN frame (DNS, connection refused/reset,
+  // timeout, offline, SSL, etc.). Render a branded error page with a Retry
+  // button. Ignore sub-frame failures and benign aborts (-3, ERR_ABORTED —
+  // fired on redirects and when the user navigates away mid-load), and never
+  // recurse on our own data: error page.
+  wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    if (errorCode === -3) return; // ERR_ABORTED — usually not a real failure
+    if ((validatedURL || '').startsWith('data:text/html')) return; // our error page
+    if (wc.isDestroyed()) return;
+
+    const info = describeNetError(errorCode, errorDescription);
+    const html = renderErrorPage({
+      title: info.title,
+      message: info.message,
+      hint: info.hint,
+      code: `${errorDescription || 'ERROR'} (${errorCode})`,
+      failedUrl: validatedURL || wc.getURL() || 'about:blank',
+    });
+    wc.loadURL(errorPageDataUrl(html));
   });
 
   // Page title changed

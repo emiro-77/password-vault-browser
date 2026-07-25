@@ -239,6 +239,9 @@ html, body {
   flex-shrink: 0;
   user-select: none;
   -webkit-user-drag: none;
+  /* Logo is pinned to the far right (after the Settings button); a small left
+     margin keeps it from crowding the ⚙ button. */
+  margin-left: 2px;
 }
 
 .theme-toggle-btn {

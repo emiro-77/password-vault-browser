@@ -565,6 +565,16 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   `loginPageManager.canonicalAccountDomain(url)` is the single source of truth
   used by `markLoggedIn`/status emits/tab-close demotion (main) and by
   `reloadStatusesForUrl` + a canonical `accountDomainRef` (renderer) (v1.1.3)
+- ✅ **Branded connection-error pages**: when a page fails to load at the
+  network level (DNS not resolved, connection refused/reset, timeout, offline,
+  SSL, …) the tab now shows a themed error page with a friendly message and a
+  "Try again" button instead of a blank/stale view — driven by
+  `did-fail-load` on the main frame. Empty-body 502/503/504 gateway responses
+  are also replaced with a branded page; sites serving their own 4xx/5xx
+  content are left untouched. See `src/main/services/error-page.ts` +
+  `tests/error-page.test.ts` (v1.1.4)
+- ✅ **Logo position**: the app logo now sits at the far right of the address
+  bar, to the right of the ⚙ Settings button (v1.1.4)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to
