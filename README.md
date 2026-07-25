@@ -550,6 +550,12 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   visible `dialog.showErrorBox` instead of a silent `app.quit()` — fixes the
   installer/portable `.exe` launching with "nothing happened, no window, no
   error" (v1.1.1)
+- ✅ **Upgrade-migration crash fix**: existing (pre-v1.1.0) databases crashed on
+  launch with `SqliteError: no such column: login_domain`, because the
+  `login_domain` index was created inline in `SCHEMA_SQL` (which runs before the
+  ALTER-TABLE migration, and `CREATE TABLE IF NOT EXISTS` is a no-op on an
+  existing table). The index is now created inside the migration, after the
+  column is added; covered by `tests/db-migration.test.ts` (v1.1.2)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

@@ -106,7 +106,10 @@ CREATE TABLE IF NOT EXISTS login_page_mappings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_login_page_mappings_domain ON login_page_mappings(main_domain);
-CREATE INDEX IF NOT EXISTS idx_login_page_mappings_login_domain ON login_page_mappings(login_domain);
+-- NOTE: the index on login_domain is created in migrateLoginPageMappingColumns()
+-- (db/index.ts), NOT here. On an upgraded DB the CREATE TABLE above is a no-op,
+-- so login_domain may not exist yet at schema-run time; the index must only be
+-- created after the ALTER TABLE migration has added the column.
 
 -- Optional future: site-specific autofill selectors
 CREATE TABLE IF NOT EXISTS site_rules (
