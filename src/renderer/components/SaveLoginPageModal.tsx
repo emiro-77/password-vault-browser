@@ -57,6 +57,21 @@ export default function SaveLoginPageModal({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [restricted, setRestricted] = useState(false);
 
+  // Optional related URLs (host or host/path) that also share this login page.
+  const [relatedUrls, setRelatedUrls] = useState<string[]>([]);
+  const [newRelated, setNewRelated] = useState('');
+
+  const addRelated = useCallback(() => {
+    const v = newRelated.trim();
+    if (!v) return;
+    setRelatedUrls(prev => (prev.includes(v) ? prev : [...prev, v]));
+    setNewRelated('');
+  }, [newRelated]);
+
+  const removeRelated = useCallback((r: string) => {
+    setRelatedUrls(prev => prev.filter(x => x !== r));
+  }, []);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,6 +122,7 @@ export default function SaveLoginPageModal({
     const res = await api.loginPages.save({
       mainDomain: mainDomain.trim(),
       loginUrl: currentUrl,
+      relatedUrls,
       categoryId: effectiveCategoryId,
       categoryRestricted: restricted,
     });
@@ -122,7 +138,7 @@ export default function SaveLoginPageModal({
         restricted ? ' (restricted to the chosen category)' : ''
       }.`
     );
-  }, [api, mainDomain, currentUrl, restricted, categoryId, newCategoryName, onSaved]);
+  }, [api, mainDomain, currentUrl, restricted, categoryId, newCategoryName, relatedUrls, onSaved]);
 
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
@@ -160,6 +176,33 @@ export default function SaveLoginPageModal({
             Pick a previously-opened website. Example: this page is{' '}
             <code>{loginHost}</code>, main website could be{' '}
             <code>{currentDomain || 'chatgpt.com'}</code>.
+          </p>
+        </div>
+
+        {/* Related URLs (optional) */}
+        <div className="modal-field">
+          <label className="modal-field-label">Related URLs <span className="modal-hint" style={{ display: 'inline' }}>(optional)</span></label>
+          <div className="related-editor">
+            {relatedUrls.map((r, i) => (
+              <div key={i} className="related-editor-row">
+                <span className="related-editor-url truncate" title={r}>{r}</span>
+                <button className="related-editor-remove" title="Remove" onClick={() => removeRelated(r)}>✕</button>
+              </div>
+            ))}
+            <div className="related-editor-add">
+              <input
+                className="modal-input"
+                value={newRelated}
+                onChange={e => setNewRelated(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addRelated(); } }}
+                placeholder="e.g. chatgpt.com/dashboard"
+              />
+              <button className="modal-btn" onClick={addRelated} disabled={!newRelated.trim()}>Add</button>
+            </div>
+          </div>
+          <p className="modal-hint">
+            Pages under the main site that also share these accounts. Nested
+            paths (e.g. <code>chatgpt.com/dashboard</code>) match automatically.
           </p>
         </div>
 

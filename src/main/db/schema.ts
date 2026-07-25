@@ -97,6 +97,8 @@ CREATE TABLE IF NOT EXISTS login_page_mappings (
   id                  TEXT PRIMARY KEY,
   main_domain         TEXT NOT NULL,          -- eTLD+1 of the main website
   login_url           TEXT NOT NULL,          -- full URL to open + autofill
+  login_domain        TEXT NOT NULL DEFAULT '', -- eTLD+1 of login_url = CANONICAL account key
+  related_urls        TEXT NOT NULL DEFAULT '[]', -- JSON array of extra related URL roots
   category_id         TEXT REFERENCES categories(id) ON DELETE SET NULL,
   category_restricted INTEGER NOT NULL DEFAULT 0,
   created_at          TEXT NOT NULL,
@@ -104,6 +106,7 @@ CREATE TABLE IF NOT EXISTS login_page_mappings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_login_page_mappings_domain ON login_page_mappings(main_domain);
+CREATE INDEX IF NOT EXISTS idx_login_page_mappings_login_domain ON login_page_mappings(login_domain);
 
 -- Optional future: site-specific autofill selectors
 CREATE TABLE IF NOT EXISTS site_rules (

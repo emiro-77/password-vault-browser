@@ -9,7 +9,7 @@
 //   - filtering the visible accounts by the active category
 
 import React, { useRef, useState, useCallback } from 'react';
-import { LoginStatus, Category } from '../../shared/types';
+import { LoginStatus, Category, LoginConnection } from '../../shared/types';
 
 interface EntryWithStatus {
   entry: { id: string; label: string; usernameOrEmail: string };
@@ -26,6 +26,7 @@ interface EntryWithStatus {
 interface SidebarProps {
   entries: EntryWithStatus[];
   currentDomain: string | null;
+  connection: LoginConnection | null;
   collapsed: boolean;
   onToggleCollapse: () => void;
   onSelectEntry: (loginEntryId: string) => void;
@@ -46,6 +47,7 @@ const ACTIVE_STATUSES: LoginStatus[] = ['logged_in', 'active_tab_open'];
 export default function Sidebar({
   entries,
   currentDomain,
+  connection,
   collapsed,
   onToggleCollapse,
   onSelectEntry,
@@ -157,19 +159,69 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Current domain indicator (expanded only) */}
-      {!collapsed && (
-        <div className="sidebar-domain-info">
-          <div className="sidebar-domain-label">Current Site</div>
-          <div className="sidebar-domain-value">
-            {currentDomain ? (
-              <span className="truncate" style={{ display: 'block' }}>{currentDomain}</span>
-            ) : (
-              <span style={{ color: 'var(--text-muted)' }}>No page loaded</span>
-            )}
+      {/* Current-site indicator (expanded only). The view adapts to the 3
+          login-page scenarios:
+            A 'login'      — this page IS a saved login page
+            B 'connected'  — main/related URL linked to a login page
+            C 'standalone' — no login-page association (default). */}
+      {!collapsed && (() => {
+        const scenario = connection?.scenario ?? 'standalone';
+
+        if (scenario === 'login') {
+          return (
+            <div className="sidebar-domain-info scenario-login" aria-label="Login page">
+              <div className="sidebar-domain-label">
+                <span className="scenario-badge login">🔑 Login Page</span>
+              </div>
+              <div className="sidebar-domain-value">
+                <span className="truncate" style={{ display: 'block' }}>{currentDomain}</span>
+              </div>
+              <div className="scenario-hint">
+                Enter credentials here. Accounts are shared with{' '}
+                <strong>{connection?.mainDomain || 'the main site'}</strong> and its related pages.
+              </div>
+            </div>
+          );
+        }
+
+        if (scenario === 'connected') {
+          const related = connection?.relatedUrls ?? [];
+          return (
+            <div className="sidebar-domain-info scenario-connected" aria-label="Connected site">
+              <div className="sidebar-domain-label">
+                <span className="scenario-badge connected">🔗 Connected Site</span>
+              </div>
+              <div className="sidebar-domain-value">
+                <span className="truncate" style={{ display: 'block' }}>{currentDomain}</span>
+              </div>
+              <div className="scenario-hint">
+                Linked to login page{' '}
+                <strong>{connection?.loginDomain || connection?.loginUrl}</strong>.
+                Selecting an account opens it and signs in automatically.
+              </div>
+              {related.length > 0 && (
+                <div className="scenario-related" title={related.join('\n')}>
+                  {related.length} related URL{related.length === 1 ? '' : 's'}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Scenario C — standalone / unconnected (default).
+        return (
+          <div className="sidebar-domain-info scenario-standalone">
+            <div className="sidebar-domain-label">Current Site</div>
+            <div className="sidebar-domain-value">
+              {currentDomain ? (
+                <span className="truncate" style={{ display: 'block' }}>{currentDomain}</span>
+              ) : (
+                <span style={{ color: 'var(--text-muted)' }}>No page loaded</span>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Login entries */}
       <div className="sidebar-entries">

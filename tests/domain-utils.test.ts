@@ -18,6 +18,9 @@ import {
   isValidUrl,
   normalizeUrlOrSearch,
   belongsToMainSite,
+  normalizeRoot,
+  matchesRoot,
+  belongsToRelated,
 } from '../src/main/services/domain-utils';
 
 // ============================================================================
@@ -259,6 +262,94 @@ function test_belongsToMainSite() {
 }
 
 // ============================================================================
+// normalizeRoot() — canonical host/path form for related-URL matching
+// ============================================================================
+
+function test_normalizeRoot() {
+  console.log('Testing normalizeRoot()...');
+
+  // Host is lowercased & www-stripped; PATH case is preserved (HTTP paths are
+  // case-sensitive) and the trailing slash is trimmed.
+  console.assert(
+    normalizeRoot('https://www.Example.com/Dashboard/') === 'example.com/Dashboard',
+    'full URL should normalize host, preserve path case, strip www, trim slash'
+  );
+  console.assert(
+    normalizeRoot('example.com') === 'example.com',
+    'bare host stays as-is'
+  );
+  console.assert(
+    normalizeRoot('example.com/app?x=1#y') === 'example.com/app',
+    'query and hash are dropped'
+  );
+  console.assert(
+    normalizeRoot('  https://EXAMPLE.com  ') === 'example.com',
+    'trims whitespace and lowercases host'
+  );
+  console.assert(normalizeRoot('') === '', 'empty stays empty');
+
+  console.log('  ✓ All normalizeRoot tests passed');
+}
+
+// ============================================================================
+// matchesRoot() / belongsToRelated() — related-URL path-prefix matching
+// ============================================================================
+
+function test_matchesRoot() {
+  console.log('Testing matchesRoot() / belongsToRelated()...');
+
+  // Path root matches itself and nested pages under it (whole-segment).
+  console.assert(
+    matchesRoot('https://example.com/dashboard/x', 'example.com/dashboard') === true,
+    'nested page under related root should match'
+  );
+  console.assert(
+    matchesRoot('https://example.com/dashboard', 'example.com/dashboard') === true,
+    'exact related root should match'
+  );
+  // Guard against partial-segment false positives.
+  console.assert(
+    matchesRoot('https://example.com/dash', 'example.com/dashboard') === false,
+    '/dash must NOT match /dashboard'
+  );
+  console.assert(
+    matchesRoot('https://example.com/dashboardish', 'example.com/dashboard') === false,
+    '/dashboardish must NOT match /dashboard (segment boundary)'
+  );
+  // Host-only root matches any path on that host.
+  console.assert(
+    matchesRoot('https://example.com/anything', 'example.com') === true,
+    'host-only root matches any path'
+  );
+  // Different host never matches.
+  console.assert(
+    matchesRoot('https://other.com/dashboard', 'example.com/dashboard') === false,
+    'different host must not match'
+  );
+  // www normalization on both sides.
+  console.assert(
+    matchesRoot('https://www.example.com/app', 'example.com/app') === true,
+    'www is normalized before matching'
+  );
+
+  // belongsToRelated: matches if ANY root matches.
+  console.assert(
+    belongsToRelated('https://example.com/team/42', ['example.com/dashboard', 'example.com/team']) === true,
+    'belongsToRelated should match when one root matches'
+  );
+  console.assert(
+    belongsToRelated('https://example.com/other', ['example.com/dashboard', 'example.com/team']) === false,
+    'belongsToRelated should be false when no root matches'
+  );
+  console.assert(
+    belongsToRelated('https://example.com/x', []) === false,
+    'belongsToRelated with no roots is false'
+  );
+
+  console.log('  ✓ All matchesRoot / belongsToRelated tests passed');
+}
+
+// ============================================================================
 // Run all tests
 // ============================================================================
 
@@ -270,6 +361,8 @@ function runAllTests() {
   test_isValidUrl();
   test_normalizeUrlOrSearch();
   test_belongsToMainSite();
+  test_normalizeRoot();
+  test_matchesRoot();
   console.log('\n✓ All domain-utils tests completed.');
 }
 

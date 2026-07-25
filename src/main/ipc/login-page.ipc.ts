@@ -14,7 +14,9 @@ import {
   IpcResponse,
   LoginPageMapping,
   SaveLoginPageRequest,
+  UpdateLoginPageRequest,
   ResolvedLoginPage,
+  LoginConnection,
 } from '../../shared/types';
 import { loginPageManager } from '../services/login-page-manager';
 
@@ -41,6 +43,17 @@ export function registerLoginPageIpc(): void {
     }
   });
 
+  // Update a mapping in place (Settings editor: main URL, related URLs, toggle).
+  ipcMain.handle(IPC_CHANNELS.LOGIN_PAGE_UPDATE, async (_event, req: UpdateLoginPageRequest): Promise<IpcResponse<LoginPageMapping>> => {
+    try {
+      if (!req?.id) return { success: false, error: 'A mapping id is required.' };
+      const data = loginPageManager.update(req);
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
   // Delete a mapping.
   ipcMain.handle(IPC_CHANNELS.LOGIN_PAGE_DELETE, async (_event, id: string): Promise<IpcResponse> => {
     try {
@@ -59,6 +72,18 @@ export function registerLoginPageIpc(): void {
         return { success: true, data: null };
       }
       const data = loginPageManager.resolveForSelection(currentUrl, loginEntryId);
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Resolve the connection context (scenario + canonical account domain) for
+  // the currently-viewed URL. Drives the 3 vault-sidebar scenarios and makes
+  // accounts sync across login / main / related pages.
+  ipcMain.handle(IPC_CHANNELS.LOGIN_PAGE_CONNECTION, async (_event, url: string): Promise<IpcResponse<LoginConnection>> => {
+    try {
+      const data = loginPageManager.resolveConnection(url || '');
       return { success: true, data };
     } catch (err: any) {
       return { success: false, error: err.message };

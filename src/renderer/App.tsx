@@ -11,7 +11,7 @@ import CategoryModal from './components/CategoryModal';
 import SettingsPanel from './components/SettingsPanel';
 import SaveLoginPageModal from './components/SaveLoginPageModal';
 import { Theme } from './components/ThemeToggle';
-import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus, Category } from '../shared/types';
+import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus, Category, LoginConnection } from '../shared/types';
 import { WebviewTag } from './types.d';
 import { getApi, isMockApi } from './api';
 import { normalizeUrlOrSearch, domainFromUrl } from '../shared/url-utils';
@@ -47,6 +47,11 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [currentUrl, setCurrentUrl] = useState('');
   const [currentDomain, setCurrentDomain] = useState<string | null>(null);
+  // Login-page connection context for the current URL. Drives the 3 vault
+  // sidebar scenarios and — crucially — the CANONICAL account domain that
+  // accounts/status/categories load under, so accounts stay in sync across the
+  // login page, the main website and any related/nested URL.
+  const [connection, setConnection] = useState<LoginConnection | null>(null);
   const [currentTitle, setCurrentTitle] = useState('New Tab');
   const [navigationState, setNavigationState] = useState<NavigationState>({ canGoBack: false, canGoForward: false, isLoading: false });
   // Estimated page-load progress (0..1). Drives the light-blue loading bar
@@ -218,25 +223,49 @@ export default function App() {
     await Promise.all([loadLoginEntries(currentDomain), loadBookmarks()]);
   }, [loadLoginEntries, loadBookmarks, currentDomain]);
 
+  // The CANONICAL domain accounts/status/categories are keyed on. When the
+  // current URL is a login page or a page connected to one, this is the
+  // mapping's login domain (so the account list is identical across the login
+  // page, the main website and every related URL). Otherwise it's the raw
+  // current domain.
+  const accountDomain = (connection && connection.scenario !== 'standalone' && connection.accountDomain)
+    ? connection.accountDomain
+    : currentDomain;
+
   // ---- Initial load ----
 
   useEffect(() => {
     loadBookmarks();
   }, [loadBookmarks]);
 
-  // Per-site accounts (#3): reload the login entries whenever the active
-  // site/domain changes so the sidebar only shows accounts for this site.
+  // Resolve the login-page connection whenever the current URL changes.
   useEffect(() => {
-    loadLoginEntries(currentDomain);
-    loadCategories(currentDomain);
-  }, [currentDomain, loadLoginEntries, loadCategories]);
+    let cancelled = false;
+    if (!currentUrl || currentUrl === 'about:blank') {
+      setConnection(null);
+      return;
+    }
+    (async () => {
+      const res = await api.loginPages.connection(currentUrl);
+      if (!cancelled && res.success && res.data) setConnection(res.data);
+    })();
+    return () => { cancelled = true; };
+  }, [currentUrl, api]);
 
-  // Reload domain statuses when login entries or current domain changes
+  // Per-site accounts (#3): reload the login entries whenever the active
+  // account domain changes so the sidebar shows this connection group's
+  // accounts (login page + main site + related URLs share one list).
+  useEffect(() => {
+    loadLoginEntries(accountDomain);
+    loadCategories(accountDomain);
+  }, [accountDomain, loadLoginEntries, loadCategories]);
+
+  // Reload domain statuses when login entries or the account domain changes.
   useEffect(() => {
     if (loginEntries.length > 0) {
-      loadDomainStatuses(currentDomain);
+      loadDomainStatuses(accountDomain);
     }
-  }, [loginEntries, currentDomain, loadDomainStatuses]);
+  }, [loginEntries, accountDomain, loadDomainStatuses]);
 
   // ---- Webview management ----
 
@@ -577,19 +606,21 @@ export default function App() {
       label: modalData.label,
       usernameOrEmail: modalData.usernameOrEmail,
       password: modalData.password,
-      // #3: bind the account to the current site so it's saved per-website.
-      domain: currentDomain || undefined,
+      // Bind the account to the CANONICAL account domain of this connection
+      // group, so an account added on the main site / a related URL still
+      // appears on the login page (and vice-versa).
+      domain: accountDomain || undefined,
     });
 
     if (res.success) {
       setShowAddEntryModal(false);
       api.tabs.setOverlay(false);
-      loadLoginEntries(currentDomain);
+      loadLoginEntries(accountDomain);
     } else {
       // #1: surface duplicate-account (and any other) errors in the modal.
       setModalError(res.error || 'Failed to save account.');
     }
-  }, [modalData, api, loadLoginEntries, currentDomain]);
+  }, [modalData, api, loadLoginEntries, accountDomain]);
 
   // ---- Bookmark handler (#1: star button in the address bar) ----
 
@@ -634,9 +665,9 @@ export default function App() {
     if (res.success) {
       setEntryToDelete(null);
       api.tabs.setOverlay(false);
-      loadLoginEntries(currentDomain);
+      loadLoginEntries(accountDomain);
     }
-  }, [entryToDelete, api, loadLoginEntries, currentDomain]);
+  }, [entryToDelete, api, loadLoginEntries, accountDomain]);
 
   // ---- Category handlers (Feature 3) ----
 
@@ -667,7 +698,7 @@ export default function App() {
         name: draft.name,
         icon: draft.icon,
         scope: draft.scope,
-        domain: draft.scope === 'private' ? (currentDomain || undefined) : undefined,
+        domain: draft.scope === 'private' ? (accountDomain || undefined) : undefined,
         accountIds: draft.accountIds,
       });
     } else {
@@ -675,23 +706,23 @@ export default function App() {
         name: draft.name,
         icon: draft.icon,
         scope: draft.scope,
-        domain: draft.scope === 'private' ? (currentDomain || undefined) : undefined,
+        domain: draft.scope === 'private' ? (accountDomain || undefined) : undefined,
         accountIds: draft.accountIds,
       });
     }
     setCategoryModalOpen(false);
     setEditingCategory(null);
     api.tabs.setOverlay(false);
-    loadCategories(currentDomain);
-  }, [editingCategory, api, currentDomain, loadCategories]);
+    loadCategories(accountDomain);
+  }, [editingCategory, api, accountDomain, loadCategories]);
 
   const handleDeleteCategory = useCallback(async (category: Category) => {
     const res = await api.categories.delete(category.id);
     if (res.success) {
       if (activeCategoryId === category.id) setActiveCategoryId(null);
-      loadCategories(currentDomain);
+      loadCategories(accountDomain);
     }
-  }, [api, activeCategoryId, currentDomain, loadCategories]);
+  }, [api, activeCategoryId, accountDomain, loadCategories]);
 
   // Filter the sidebar entries by the active category (null = show all).
   const visibleStatuses = React.useMemo(() => {
@@ -753,6 +784,7 @@ export default function App() {
         <Sidebar
           entries={visibleStatuses}
           currentDomain={currentDomain}
+          connection={connection}
           collapsed={sidebarCollapsed}
           onToggleCollapse={handleToggleSidebar}
           onSelectEntry={handleSelectLoginEntry}

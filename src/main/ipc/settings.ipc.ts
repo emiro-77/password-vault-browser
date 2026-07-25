@@ -27,6 +27,7 @@ import {
 import { loginEntryManager } from '../services/login-entry-manager';
 import { statusManager } from '../services/status-manager';
 import { sessionManager } from '../services/session-manager';
+import { loginPageManager } from '../services/login-page-manager';
 import { buildEncryptedExport, importEncryptedBackup } from '../services/vault-transfer';
 
 export function registerSettingsIpc(): void {
@@ -90,9 +91,23 @@ export function registerSettingsIpc(): void {
         });
       }
 
+      // Attach login-page mapping info: a group whose domain matches a
+      // mapping's login domain (or, as a fallback, its main domain) is a
+      // "login site". This lets Settings visually flag it and show its
+      // main/related URLs.
+      const mappings = loginPageManager.listAll();
+      const mappingByDomain = new Map<string, typeof mappings[number]>();
+      for (const m of mappings) {
+        if (m.loginDomain) mappingByDomain.set(m.loginDomain, m);
+      }
+
       // Emit sorted: named sites alphabetically, unscoped ('') last.
       const result: SiteAccountsGroup[] = Array.from(groups.entries())
-        .map(([domain, accounts]) => ({ domain, accounts }))
+        .map(([domain, accounts]) => ({
+          domain,
+          accounts,
+          loginMapping: (domain && mappingByDomain.get(domain)) || null,
+        }))
         .sort((a, b) => {
           if (a.domain === '') return 1;
           if (b.domain === '') return -1;

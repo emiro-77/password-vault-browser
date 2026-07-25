@@ -10,7 +10,7 @@
 //   2. Data management — clear the browser's cache / cookies / site storage.
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { SiteAccountsGroup, SiteAccountInfo, LoginStatus } from '../../shared/types';
+import { SiteAccountsGroup, SiteAccountInfo, LoginStatus, LoginPageMapping, Category } from '../../shared/types';
 import { getApi } from '../api';
 
 interface SettingsPanelProps {
@@ -54,6 +54,10 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   // ---- Site accounts ----
   const [groups, setGroups] = useState<SiteAccountsGroup[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
+  // Filter: show all sites, or only sites that are saved login pages.
+  const [siteFilter, setSiteFilter] = useState<'all' | 'login'>('all');
+  // The login-page mapping being edited in-place (Settings editor), or null.
+  const [editingMapping, setEditingMapping] = useState<LoginPageMapping | null>(null);
 
   const loadAccounts = useCallback(async () => {
     setAccountsLoading(true);
@@ -63,6 +67,9 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   }, [api]);
 
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
+
+  const loginSiteCount = groups.filter(g => g.loginMapping).length;
+  const visibleGroups = siteFilter === 'login' ? groups.filter(g => g.loginMapping) : groups;
 
   // ---- Edit / delete account ----
   // The row being edited (account + its site domain), or null when closed.
@@ -152,20 +159,63 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 <strong>{groups.length}</strong> {groups.length === 1 ? 'group' : 'groups'}.
               </p>
 
+              {/* Filter: All Sites / Login Sites */}
+              <div className="site-filter" role="tablist" aria-label="Filter sites">
+                <button
+                  role="tab"
+                  aria-selected={siteFilter === 'all'}
+                  className={`site-filter-btn${siteFilter === 'all' ? ' active' : ''}`}
+                  onClick={() => setSiteFilter('all')}
+                >
+                  All Sites <span className="site-filter-count">{groups.length}</span>
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={siteFilter === 'login'}
+                  className={`site-filter-btn${siteFilter === 'login' ? ' active' : ''}`}
+                  onClick={() => setSiteFilter('login')}
+                >
+                  🔑 Login Sites <span className="site-filter-count">{loginSiteCount}</span>
+                </button>
+              </div>
+
               {accountsLoading ? (
                 <div className="settings-empty">Loading…</div>
-              ) : groups.length === 0 ? (
-                <div className="settings-empty">No saved accounts yet.</div>
+              ) : visibleGroups.length === 0 ? (
+                <div className="settings-empty">
+                  {siteFilter === 'login' ? 'No saved login pages yet.' : 'No saved accounts yet.'}
+                </div>
               ) : (
                 <div className="site-groups">
-                  {groups.map(group => (
-                    <div key={group.domain || '(unscoped)'} className="site-group">
+                  {visibleGroups.map(group => (
+                    <div
+                      key={group.domain || '(unscoped)'}
+                      className={`site-group${group.loginMapping ? ' is-login-site' : ''}`}
+                    >
                       <div className="site-group-header">
                         <span className="site-group-domain">
+                          {group.loginMapping && <span className="login-site-badge" title="Saved login page">🔑</span>}
                           {group.domain || 'Unscoped / legacy accounts'}
                         </span>
-                        <span className="site-group-count">{group.accounts.length}</span>
+                        <span className="site-group-header-right">
+                          <span className="site-group-count">{group.accounts.length}</span>
+                          {group.loginMapping && (
+                            <button
+                              className="site-account-action-btn site-group-edit-btn"
+                              title="Edit login-page mapping"
+                              aria-label={`Edit login-page mapping for ${group.domain}`}
+                              onClick={() => setEditingMapping(group.loginMapping!)}
+                            >
+                              ✎ Edit
+                            </button>
+                          )}
+                        </span>
                       </div>
+
+                      {/* Visual mapping: main URL + related URLs (with overflow). */}
+                      {group.loginMapping && (
+                        <MappingUrls mapping={group.loginMapping} />
+                      )}
                       <ul className="site-account-list">
                         {group.accounts.map(acc => {
                           const remaining = formatTimeRemaining(acc.loggedInUntil);
@@ -284,6 +334,14 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           domain={editing.domain}
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await loadAccounts(); }}
+        />
+      )}
+
+      {editingMapping && (
+        <MappingEditModal
+          mapping={editingMapping}
+          onClose={() => setEditingMapping(null)}
+          onSaved={async () => { setEditingMapping(null); await loadAccounts(); }}
         />
       )}
 
@@ -573,6 +631,208 @@ function DataTransferModal({ mode, onClose, onDone }: DataTransferModalProps) {
             {busy
               ? (isExport ? 'Exporting…' : 'Importing…')
               : (isExport ? 'Choose file & export' : 'Choose file & overwrite')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Login-page mapping URLs (visual mapping inside a site card)
+// ============================================================================
+// Shows the Main URL and the Related URLs associated with a login page. When
+// related URLs overflow, only the first few are shown followed by "+ [n] more"
+// (toggles to reveal the rest).
+
+const RELATED_PREVIEW_COUNT = 3;
+
+function MappingUrls({ mapping }: { mapping: LoginPageMapping }) {
+  const [expanded, setExpanded] = useState(false);
+  const related = mapping.relatedUrls || [];
+  const shown = expanded ? related : related.slice(0, RELATED_PREVIEW_COUNT);
+  const hiddenCount = related.length - shown.length;
+
+  return (
+    <div className="mapping-urls">
+      <div className="mapping-url-row">
+        <span className="mapping-url-tag main">Main</span>
+        <span className="mapping-url-value truncate" title={mapping.mainDomain}>{mapping.mainDomain}</span>
+      </div>
+      {related.length > 0 && (
+        <div className="mapping-url-row related">
+          <span className="mapping-url-tag related">Related</span>
+          <span className="mapping-url-chips">
+            {shown.map((r, i) => (
+              <span key={i} className="mapping-url-chip" title={r}>{r}</span>
+            ))}
+            {hiddenCount > 0 && (
+              <button className="mapping-url-more" onClick={() => setExpanded(true)}>
+                + {hiddenCount} more
+              </button>
+            )}
+            {expanded && related.length > RELATED_PREVIEW_COUNT && (
+              <button className="mapping-url-more" onClick={() => setExpanded(false)}>
+                show less
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// Login-page mapping edit modal (in-place editor from Settings)
+// ============================================================================
+// Lets the user change the Main URL, add/remove Related URLs, and toggle the
+// category restriction ("Set as Login Page" behavior) for a saved login page.
+
+interface MappingEditModalProps {
+  mapping: LoginPageMapping;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}
+
+function MappingEditModal({ mapping, onClose, onSaved }: MappingEditModalProps) {
+  const api = getApi();
+
+  const [mainDomain, setMainDomain] = useState(mapping.mainDomain);
+  const [loginUrl, setLoginUrl] = useState(mapping.loginUrl);
+  const [related, setRelated] = useState<string[]>(mapping.relatedUrls || []);
+  const [newRelated, setNewRelated] = useState('');
+  const [restricted, setRestricted] = useState(mapping.categoryRestricted);
+  const [categoryId, setCategoryId] = useState<string | null>(mapping.categoryId);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const res = await api.categories.list();
+      if (res.success && res.data) setCategories(res.data);
+    })();
+  }, [api]);
+
+  const addRelated = useCallback(() => {
+    const v = newRelated.trim();
+    if (!v) return;
+    setRelated(prev => (prev.includes(v) ? prev : [...prev, v]));
+    setNewRelated('');
+  }, [newRelated]);
+
+  const removeRelated = useCallback((r: string) => {
+    setRelated(prev => prev.filter(x => x !== r));
+  }, []);
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    const res = await api.loginPages.update({
+      id: mapping.id,
+      mainDomain: mainDomain.trim(),
+      loginUrl: loginUrl.trim(),
+      relatedUrls: related,
+      categoryRestricted: restricted,
+      categoryId: restricted ? categoryId : null,
+    });
+    setSaving(false);
+    if (res.success) {
+      await onSaved();
+    } else {
+      setError(res.error || 'Failed to update the login-page mapping.');
+    }
+  }, [api, mapping.id, mainDomain, loginUrl, related, restricted, categoryId, onSaved]);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal login-page-modal mapping-edit-modal" onClick={e => e.stopPropagation()}>
+        <h3 className="modal-title">Edit login-page mapping</h3>
+        <p className="settings-section-desc">
+          Login page: <code>{mapping.loginDomain || mapping.loginUrl}</code>
+        </p>
+
+        <div className="modal-field">
+          <label className="modal-field-label">Main website</label>
+          <input
+            className="modal-input"
+            value={mainDomain}
+            onChange={e => setMainDomain(e.target.value)}
+            placeholder="example.com"
+          />
+          <div className="modal-hint">The primary site this login page signs you into.</div>
+        </div>
+
+        <div className="modal-field">
+          <label className="modal-field-label">Login page URL</label>
+          <input
+            className="modal-input"
+            value={loginUrl}
+            onChange={e => setLoginUrl(e.target.value)}
+            placeholder="https://login.example.com/"
+          />
+        </div>
+
+        <div className="modal-field">
+          <label className="modal-field-label">Related URLs</label>
+          <div className="related-editor">
+            {related.length === 0 && (
+              <div className="modal-hint">No related URLs yet. Add any path under the main site (e.g. <code>example.com/app</code>).</div>
+            )}
+            {related.map((r, i) => (
+              <div key={i} className="related-editor-row">
+                <span className="related-editor-url truncate" title={r}>{r}</span>
+                <button className="related-editor-remove" title="Remove" onClick={() => removeRelated(r)}>✕</button>
+              </div>
+            ))}
+            <div className="related-editor-add">
+              <input
+                className="modal-input"
+                value={newRelated}
+                onChange={e => setNewRelated(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addRelated(); } }}
+                placeholder="example.com/dashboard"
+              />
+              <button className="modal-btn" onClick={addRelated} disabled={!newRelated.trim()}>Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="modal-checkbox-row">
+          <input
+            id="mapping-edit-restrict"
+            type="checkbox"
+            checked={restricted}
+            onChange={e => setRestricted(e.target.checked)}
+          />
+          <label htmlFor="mapping-edit-restrict">
+            Restrict to a category (only accounts in that category use this login page)
+          </label>
+        </div>
+
+        {restricted && (
+          <div className="modal-field">
+            <label className="modal-field-label">Category</label>
+            <select
+              className="modal-input"
+              value={categoryId ?? ''}
+              onChange={e => setCategoryId(e.target.value || null)}
+            >
+              <option value="">— choose a category —</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {error && <div className="modal-error" role="alert">{error}</div>}
+
+        <div className="modal-actions">
+          <button className="modal-btn" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="modal-btn primary" onClick={save} disabled={saving || !mainDomain.trim() || !loginUrl.trim()}>
+            {saving ? 'Saving…' : 'Save changes'}
           </button>
         </div>
       </div>

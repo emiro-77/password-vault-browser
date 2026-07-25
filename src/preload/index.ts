@@ -65,8 +65,10 @@ const IPC_CHANNELS = {
 
   LOGIN_PAGE_LIST:        'login-page:list',
   LOGIN_PAGE_SAVE:        'login-page:save',
+  LOGIN_PAGE_UPDATE:      'login-page:update',
   LOGIN_PAGE_DELETE:      'login-page:delete',
   LOGIN_PAGE_RESOLVE:     'login-page:resolve',
+  LOGIN_PAGE_CONNECTION:  'login-page:connection',
 
   // Settings
   SETTINGS_SITE_ACCOUNTS: 'settings:site-accounts',
@@ -168,9 +170,11 @@ const api = {
   loginPages: {
     list: (mainDomain?: string) => ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_LIST, mainDomain),
     save: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_SAVE, req),
+    update: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_UPDATE, req),
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_DELETE, id),
     resolve: (currentUrl: string, loginEntryId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_RESOLVE, { currentUrl, loginEntryId }),
+    connection: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.LOGIN_PAGE_CONNECTION, url),
   },
 
   // ---- Settings ----

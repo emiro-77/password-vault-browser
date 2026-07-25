@@ -101,6 +101,8 @@ export interface LoginPageMapping {
   id: string;
   mainDomain: string;            // eTLD+1 of the main website, e.g. 'chatgpt.com'
   loginUrl: string;              // full URL of the login page to open + autofill
+  loginDomain: string;           // eTLD+1 of loginUrl = CANONICAL account key
+  relatedUrls: string[];         // extra related roots (host or host/path)
   categoryId: string | null;     // restrict to this category (when restricted)
   categoryRestricted: boolean;   // true = only accounts in categoryId may use it
   createdAt: string;
@@ -110,8 +112,19 @@ export interface LoginPageMapping {
 export interface SaveLoginPageRequest {
   mainDomain: string;            // chosen main website (eTLD+1)
   loginUrl: string;              // the current page being saved as the login page
+  relatedUrls?: string[];        // optional extra related roots
   categoryId?: string | null;    // optional category
   categoryRestricted?: boolean;  // default false = any account can use it
+}
+
+/** Partial update to an existing mapping (from Settings in-place editor). */
+export interface UpdateLoginPageRequest {
+  id: string;
+  mainDomain?: string;
+  loginUrl?: string;
+  relatedUrls?: string[];
+  categoryId?: string | null;
+  categoryRestricted?: boolean;
 }
 
 /** Result of resolving whether a selected account should open a saved login page. */
@@ -119,6 +132,26 @@ export interface ResolvedLoginPage {
   mappingId: string;
   mainDomain: string;
   loginUrl: string;
+}
+
+/**
+ * The connection context for the CURRENTLY-viewed URL, used by the vault
+ * sidebar to switch between the 3 scenarios and to load accounts from the right
+ * canonical domain.
+ *   - 'login'      : the current page IS a saved login page.
+ *   - 'connected'  : current page is the main website or a related/nested URL
+ *                    that is linked to a saved login page.
+ *   - 'standalone' : no login-page association.
+ */
+export interface LoginConnection {
+  scenario: 'login' | 'connected' | 'standalone';
+  /** Canonical domain accounts/status/categories should be loaded under. */
+  accountDomain: string;
+  mappingId: string | null;
+  mainDomain: string | null;
+  loginUrl: string | null;
+  loginDomain: string | null;
+  relatedUrls: string[];
 }
 
 // ---- Settings: site account management ----
@@ -151,6 +184,10 @@ export interface ClearAccountTimerRequest {
 export interface SiteAccountsGroup {
   domain: string;               // '' for unscoped/legacy accounts
   accounts: SiteAccountInfo[];
+  // Login-page mapping info (present when this domain is a saved login page).
+  // Lets Settings visually distinguish login sites, show their main/related
+  // URLs, and open the in-place editor.
+  loginMapping?: LoginPageMapping | null;
 }
 
 /** What kinds of browsing data to clear. */
@@ -281,8 +318,10 @@ export const IPC_CHANNELS = {
   // Login-page mappings (Save Current Page as Login Page)
   LOGIN_PAGE_LIST:        'login-page:list',
   LOGIN_PAGE_SAVE:        'login-page:save',
+  LOGIN_PAGE_UPDATE:      'login-page:update',
   LOGIN_PAGE_DELETE:      'login-page:delete',
   LOGIN_PAGE_RESOLVE:     'login-page:resolve',
+  LOGIN_PAGE_CONNECTION:  'login-page:connection',
 
   // Settings
   SETTINGS_SITE_ACCOUNTS: 'settings:site-accounts',

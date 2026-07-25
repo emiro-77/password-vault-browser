@@ -55,6 +55,10 @@ export function initDatabase(): Database.Database {
   // status (existing DBs still have the old CHECK from CREATE TABLE).
   migrateStatusCheckAllowUsed(db);
 
+  // Migrate login_page_mappings to add login_domain + related_urls columns
+  // (added so login/main/related pages share one canonical account key).
+  migrateLoginPageMappingColumns(db);
+
   console.log('[DB] Schema initialized successfully.');
 
   return db;
@@ -133,6 +137,44 @@ function migrateStatusCheckAllowUsed(database: Database.Database): void {
     migrate();
   } catch (err) {
     console.error('[DB] status-check migration failed:', err);
+  }
+}
+
+/**
+ * Ensure login_page_mappings has the `login_domain` and `related_urls` columns
+ * (added so the login page, its main website and any related URLs all resolve
+ * to a single canonical account key). Safe to run repeatedly.
+ */
+function migrateLoginPageMappingColumns(database: Database.Database): void {
+  try {
+    const cols = database.prepare(`PRAGMA table_info(login_page_mappings)`).all() as any[];
+    const names = new Set(cols.map(c => c.name));
+    if (!names.has('login_domain')) {
+      console.log('[DB] Migrating: adding login_page_mappings.login_domain column');
+      database.exec(`ALTER TABLE login_page_mappings ADD COLUMN login_domain TEXT NOT NULL DEFAULT ''`);
+    }
+    if (!names.has('related_urls')) {
+      console.log('[DB] Migrating: adding login_page_mappings.related_urls column');
+      database.exec(`ALTER TABLE login_page_mappings ADD COLUMN related_urls TEXT NOT NULL DEFAULT '[]'`);
+    }
+    // Backfill login_domain for legacy rows from their login_url (eTLD+1).
+    const legacy = database.prepare(
+      `SELECT id, login_url FROM login_page_mappings WHERE login_domain = '' OR login_domain IS NULL`
+    ).all() as any[];
+    if (legacy.length) {
+      // Lazy import to avoid a cycle at module load.
+      const { extractDomain } = require('../services/domain-utils');
+      const upd = database.prepare(`UPDATE login_page_mappings SET login_domain = ? WHERE id = ?`);
+      for (const r of legacy) {
+        const d = extractDomain(r.login_url) || '';
+        if (d) upd.run(d, r.id);
+      }
+    }
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_login_page_mappings_login_domain ON login_page_mappings(login_domain)`
+    );
+  } catch (err) {
+    console.error('[DB] login_page_mappings column migration failed:', err);
   }
 }
 

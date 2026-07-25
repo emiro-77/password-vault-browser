@@ -374,6 +374,59 @@ New table: `login_page_mappings` (`id`, `main_domain`, `login_url`,
 `category_id`, `category_restricted`, timestamps). New IPC channels:
 `login-page:list` / `:save` / `:delete` / `:resolve`.
 
+## Login-page account sync, connection scenarios & Settings editor (v1.1.0)
+
+This release fixes the core "Set as Login Page" behavior — accounts now stay in
+sync across the login page, the main website and all related URLs — and adds
+the vault-sidebar scenarios plus an in-place mapping editor in Settings.
+
+### Account synchronization (the fix)
+
+Each mapping now stores a **canonical `login_domain`** (the eTLD+1 of the login
+URL) plus an explicit **`related_urls`** list (`host` or `host/path` roots).
+Accounts, per-site status and categories are all keyed on that canonical
+domain. `LoginPageManager.resolveConnection(url)` classifies the current URL and
+returns the canonical `accountDomain`; the renderer loads accounts/status/
+categories under it (App's `accountDomain`), so the account list and its
+statuses are **identical** across the Login Page, the Main URL and every Related
+URL — even when the login page lives on a different domain than the main site
+(which naive eTLD+1 grouping could not handle). New accounts added on any of
+these contexts are saved under the same canonical domain.
+
+Related-URL matching is whole-segment safe: `example.com/dashboard` matches
+`/dashboard` and `/dashboard/x` but **not** `/dashboardish` (see
+`matchesRoot` / `belongsToRelated` in `domain-utils.ts`, covered by
+`tests/domain-utils.test.ts`).
+
+### Vault sidebar — 3 scenarios
+
+The sidebar "Current Site" panel adapts to the connection returned by
+`login-page:connection`:
+
+- **A — Login Page** (`🔑`): the current page *is* a saved login page; shows a
+  credential-entry hint and which main site it serves.
+- **B — Connected Site** (`🔗`): the current page is the main website or a
+  related/nested URL; shows the linked login page and pulls its accounts.
+- **C — Standalone**: default view for sites with no login-page association.
+
+### Settings — Site & Account management
+
+- **Filter**: toggle between **All Sites** and **🔑 Login Sites**.
+- **Visual mapping**: login-site cards show the **Main** URL and **Related**
+  URLs as chips, with `+ [n] more` overflow (expand/collapse).
+- **In-place Edit**: an **✎ Edit** button on each login-site card opens a modal
+  to change the Main URL, add/remove Related URLs, and toggle the category
+  restriction. Backed by the new `login-page:update` IPC + `LoginPageManager.update`.
+
+### Storage / transfer
+
+Schema gains `login_domain` and `related_urls` on `login_page_mappings`
+(idempotent `ALTER`/backfill migration in `db/index.ts` for existing vaults).
+Both columns are carried by the encrypted `.vaultbackup` export/import
+automatically (generic `SELECT *` + `insertRows`), so saved login pages **and
+their related-URL associations** import correctly on other devices. New IPC
+channels: `login-page:update`, `login-page:connection`.
+
 ## Testing & CI
 
 Unit tests live in `tests/` and run with `tsx`:
@@ -485,6 +538,12 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   page to a main website, with category selection + restriction toggle;
   selecting an account on the main site (or any related/nested page) opens the
   saved login URL and autofills. Mappings export/import with the vault (v1.0.0)
+- ✅ **Login-page account sync + scenarios + Settings editor**: accounts stay
+  in sync across the login page, main URL and all related URLs (canonical
+  `login_domain` + `related_urls`); vault sidebar shows Login / Connected /
+  Standalone scenarios; Settings adds an All-Sites/Login-Sites filter, a visual
+  main+related URL map with `+n more` overflow, and an in-place mapping editor
+  (change main URL, add/remove related URLs, toggle restriction) (v1.1.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

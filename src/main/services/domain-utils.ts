@@ -112,6 +112,78 @@ export function belongsToMainSite(url: string, mainDomain: string): boolean {
 }
 
 /**
+ * Normalize a URL/host into a comparable "root" of the form `host/path`
+ * (lowercase host with www stripped, no protocol, no query/hash, trailing
+ * slash trimmed). Accepts bare hosts, hosts-with-path, or full URLs.
+ *
+ *   normalizeRoot('https://www.Example.com/Dashboard/')  -> 'example.com/dashboard'
+ *   normalizeRoot('example.com')                          -> 'example.com'
+ *   normalizeRoot('example.com/app?x=1#y')                -> 'example.com/app'
+ */
+export function normalizeRoot(input: string): string {
+  let s = (input || '').trim();
+  if (!s) return '';
+  // Strip protocol if present.
+  s = s.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '');
+  // Drop query/hash.
+  s = s.split('#')[0].split('?')[0];
+  // Split host from path.
+  const slash = s.indexOf('/');
+  let host = slash === -1 ? s : s.slice(0, slash);
+  let pathPart = slash === -1 ? '' : s.slice(slash);
+  host = host.toLowerCase().replace(/^www\./, '');
+  // Trim trailing slashes on the path; keep a leading slash form only if non-empty.
+  pathPart = pathPart.replace(/\/+$/, '');
+  return pathPart ? `${host}${pathPart}` : host;
+}
+
+/**
+ * Whether a full URL falls under a given related-URL "root". A root is any
+ * `host` or `host/path` string; the URL matches when its own normalized root
+ * starts at that host and its path is at or below the root's path.
+ *
+ *   matchesRoot('https://example.com/dashboard/x', 'example.com/dashboard') -> true
+ *   matchesRoot('https://example.com/dash', 'example.com/dashboard')        -> false (not a path segment)
+ *   matchesRoot('https://example.com/anything', 'example.com')              -> true
+ */
+export function matchesRoot(url: string, root: string): boolean {
+  const rootNorm = normalizeRoot(root);
+  if (!rootNorm) return false;
+
+  // Build the URL's normalized root, but preserve enough path to compare.
+  const hostname = extractHostname(url);
+  if (!hostname) return false;
+
+  let urlPath = '';
+  try {
+    urlPath = new URL(url).pathname.replace(/\/+$/, '');
+  } catch {
+    return false;
+  }
+  const urlRoot = urlPath ? `${hostname}${urlPath}` : hostname;
+
+  // Split root into host + path.
+  const rSlash = rootNorm.indexOf('/');
+  const rHost = rSlash === -1 ? rootNorm : rootNorm.slice(0, rSlash);
+  const rPath = rSlash === -1 ? '' : rootNorm.slice(rSlash);
+
+  if (hostname !== rHost) return false;
+  if (!rPath) return true; // host-only root matches any path on that host
+
+  // Path-prefix match on whole segments: '/dashboard' matches '/dashboard' and
+  // '/dashboard/x' but NOT '/dashboardish'.
+  return urlPath === rPath || urlPath.startsWith(rPath + '/');
+}
+
+/**
+ * Whether a URL belongs to any of the given related roots (see matchesRoot).
+ */
+export function belongsToRelated(url: string, relatedRoots: string[]): boolean {
+  if (!relatedRoots || relatedRoots.length === 0) return false;
+  return relatedRoots.some(r => matchesRoot(url, r));
+}
+
+/**
  * Validate that a URL is a proper, navigable http/https URL.
  */
 export function isValidUrl(input: string): boolean {

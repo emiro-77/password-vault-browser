@@ -186,6 +186,19 @@ function createMockApi(): PvbAPI & { __isMock: true } {
         id: 'mock-map-1',
         mainDomain: req?.mainDomain ?? 'example.com',
         loginUrl: req?.loginUrl ?? 'https://login.example.com',
+        loginDomain: 'example.com',
+        relatedUrls: req?.relatedUrls ?? [],
+        categoryId: req?.categoryId ?? null,
+        categoryRestricted: !!req?.categoryRestricted,
+        createdAt: now(),
+        updatedAt: now(),
+      }),
+      update: (req: any) => ok({
+        id: req?.id ?? 'mock-map-1',
+        mainDomain: req?.mainDomain ?? 'example.com',
+        loginUrl: req?.loginUrl ?? 'https://login.example.com',
+        loginDomain: 'example.com',
+        relatedUrls: req?.relatedUrls ?? [],
         categoryId: req?.categoryId ?? null,
         categoryRestricted: !!req?.categoryRestricted,
         createdAt: now(),
@@ -195,6 +208,16 @@ function createMockApi(): PvbAPI & { __isMock: true } {
       // In mock mode no mapping is configured, so selection falls through to
       // the normal autofill path.
       resolve: () => ok(null),
+      // Standalone (no association) in mock mode.
+      connection: (url: string) => ok({
+        scenario: 'standalone' as const,
+        accountDomain: '',
+        mappingId: null,
+        mainDomain: null,
+        loginUrl: null,
+        loginDomain: null,
+        relatedUrls: [],
+      }),
     },
 
     sendChromeHeight: () => { /* no-op in mock mode */ },
