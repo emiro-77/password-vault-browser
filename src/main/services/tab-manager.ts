@@ -469,6 +469,101 @@ export class TabManager {
   getTabCount(): number {
     return this.tabs.size;
   }
+
+  // --------------------------------------------------------------------------
+  // Live-tab source of truth (used to reconcile stale stored active_tab_ids)
+  // --------------------------------------------------------------------------
+  //
+  // The `tabs` DB table and each site_login_status row's `active_tab_id` can
+  // go stale after a crash / hard kill (the app never runs closeTab, so old
+  // active_tab_ids survive into the next launch and make phantom accounts read
+  // as "Active tab"). The in-memory `this.tabs` Map is the ONLY authority for
+  // which tabs are genuinely open right now, so status reads reconcile stored
+  // active_tab_ids against these.
+
+  /**
+   * The set of tab ids that are genuinely open right now (in memory). Only a
+   * stored active_tab_id present in this set is a real active tab.
+   */
+  getLiveTabIds(): Set<string> {
+    return new Set(this.tabs.keys());
+  }
+
+  /**
+   * On startup the in-memory tab map is empty, but the `tabs` DB table (and the
+   * site_login_status.active_tab_id links) can still hold rows from a previous
+   * session that never closed cleanly (crash / hard kill). Purge those orphaned
+   * `tabs` rows so nothing downstream mistakes them for open tabs; the stale
+   * active_tab_id links are cleared separately by reconcileStatusActiveTabs().
+   * Safe to call once at boot BEFORE any tab is created.
+   */
+  purgeOrphanedPersistedTabs(): void {
+    if (this.tabs.size > 0) return; // never touch live tabs
+    try {
+      const db = getDatabase();
+      const info = db.prepare('DELETE FROM tabs').run();
+      if (info.changes > 0) {
+        console.log(`[TabManager] Purged ${info.changes} orphaned tab row(s) from a previous session`);
+      }
+    } catch (err) {
+      console.error('[TabManager] Failed to purge orphaned tabs:', err);
+    }
+  }
+
+  /**
+   * Count the tabs currently open on a given CANONICAL account domain. Matches
+   * each live tab via its canonical account domain (login page + main site +
+   * related URLs collapse to one key), falling back to the raw tab domain.
+   * Used by Settings › Site accounts to show "N open tab(s)" per site.
+   */
+  countOpenTabsForCanonicalDomain(canonicalDomain: string): number {
+    if (!canonicalDomain) return 0;
+    let n = 0;
+    for (const [, entry] of this.tabs) {
+      const canonical =
+        loginPageManager.canonicalAccountDomain(entry.info.currentUrl || '') ||
+        entry.info.domain;
+      if (canonical === canonicalDomain || entry.info.domain === canonicalDomain) {
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /**
+   * Reconcile the persisted active-tab links against the live open tabs: any
+   * site_login_status row whose `active_tab_id` no longer corresponds to a
+   * genuinely-open tab is stale, so its link is cleared (and a still-in-window
+   * account demoted to 'logged_in' → computes to "used"; an expired one is left
+   * for expireStale). This clears phantom "Active tab" flags left over from a
+   * previous session before any new status is assigned.
+   *
+   * Returns the number of rows whose stale link was cleared.
+   */
+  reconcileStatusActiveTabs(): number {
+    const db = getDatabase();
+    const rows = db.prepare(
+      `SELECT id, active_tab_id FROM site_login_status WHERE active_tab_id IS NOT NULL`
+    ).all() as { id: string; active_tab_id: string }[];
+    if (rows.length === 0) return 0;
+
+    const live = this.getLiveTabIds();
+    const stale = rows.filter(r => !live.has(r.active_tab_id)).map(r => r.id);
+    if (stale.length === 0) return 0;
+
+    const clear = db.prepare(
+      `UPDATE site_login_status
+         SET active_tab_id = NULL,
+             status = CASE WHEN status = 'active_tab_open' THEN 'logged_in' ELSE status END
+       WHERE id = ?`
+    );
+    const tx = db.transaction((ids: string[]) => {
+      for (const id of ids) clear.run(id);
+    });
+    tx(stale);
+    console.log(`[TabManager] Reconciled ${stale.length} stale active_tab_id(s)`);
+    return stale.length;
+  }
 }
 
 // Singleton instance

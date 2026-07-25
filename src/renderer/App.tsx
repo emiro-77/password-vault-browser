@@ -460,7 +460,16 @@ export default function App() {
 
     // Update domain statuses after tab close, under the CANONICAL account
     // domain of whatever tab is now active (keeps login/main/related in sync).
-    setTimeout(() => reloadStatusesForUrl(reloadUrl), 100);
+    // When NO tab remains (reloadUrl === null) we must still refresh — via the
+    // global getAll() path — so the just-closed tab's "Active tab" flag clears
+    // instead of lingering (reloadStatusesForUrl(null) is a no-op).
+    setTimeout(() => {
+      if (reloadUrl) {
+        reloadStatusesForUrl(reloadUrl);
+      } else {
+        loadDomainStatuses(null);
+      }
+    }, 100);
   }, [activeTabId, tabs, api, currentDomain, currentUrl, loadDomainStatuses, reloadStatusesForUrl]);
 
   const handleSwitchTab = useCallback(async (tabId: string) => {

@@ -16,8 +16,12 @@ export function registerStatusIpc(): void {
   // open-tab account as active.)
   ipcMain.handle(IPC_CHANNELS.STATUS_GET_FOR_DOMAIN, async (_event, domain: string): Promise<IpcResponse> => {
     try {
+      // Self-heal any active_tab_id left over from a previous session/crash so
+      // the sidebar can never show a phantom "Active tab".
+      tabManager.reconcileStatusActiveTabs();
       const focusedTabId = tabManager.getActiveTabId();
-      const statuses = statusManager.getForDomain(domain, focusedTabId);
+      const liveTabIds = tabManager.getLiveTabIds();
+      const statuses = statusManager.getForDomain(domain, focusedTabId, liveTabIds);
       return { success: true, data: statuses };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -27,7 +31,9 @@ export function registerStatusIpc(): void {
   // Get all site login statuses
   ipcMain.handle(IPC_CHANNELS.STATUS_GET_ALL, async (): Promise<IpcResponse> => {
     try {
-      const statuses = statusManager.getAll();
+      tabManager.reconcileStatusActiveTabs();
+      const liveTabIds = tabManager.getLiveTabIds();
+      const statuses = statusManager.getAll(liveTabIds);
       return { success: true, data: statuses };
     } catch (err: any) {
       return { success: false, error: err.message };

@@ -119,6 +119,13 @@ async function initializeServices(): Promise<void> {
   // 4. Register all IPC handlers
   registerAllIpcHandlers();
 
+  // 4.5 Purge stale runtime tab state from a previous session (crash / hard
+  //     kill leaves orphaned `tabs` rows and phantom active_tab_id links).
+  //     Doing this at boot — before any tab exists — guarantees "Active tab"
+  //     starts from a clean slate and reflects only genuinely-open tabs.
+  tabManager.purgeOrphanedPersistedTabs();
+  tabManager.reconcileStatusActiveTabs();
+
   // 5. Update view bounds whenever the renderer tells us chrome height
   ipcMain.on('browser:chrome-height', (_event: any, chromeHeight: number) => {
     tabManager.updateActiveViewBounds(chromeHeight);

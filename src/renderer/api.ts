@@ -164,12 +164,14 @@ function createMockApi(): PvbAPI & { __isMock: true } {
               { loginEntryId: 'mock-2', label: 'Work Account', usernameOrEmail: 'you@company.com', status: 'used' as const, lastUsedAt: now(), loggedInUntil: inMs(1 * HOUR), isActiveTab: false },
               { loginEntryId: 'mock-1', label: 'Personal Email', usernameOrEmail: 'you@example.com', status: 'active_tab_open' as const, lastUsedAt: now(), loggedInUntil: inMs(24 * HOUR - 60000), isActiveTab: true },
             ],
+            openTabCount: 1,
           },
           {
             domain: '',
             accounts: [
               { loginEntryId: 'mock-3', label: 'Social Media', usernameOrEmail: '@yourhandle', status: 'never_used' as const, lastUsedAt: null, loggedInUntil: null, isActiveTab: false },
             ],
+            openTabCount: 0,
           },
         ]);
       },

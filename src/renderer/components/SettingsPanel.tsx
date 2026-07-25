@@ -216,6 +216,14 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                           {group.domain || 'Unscoped / legacy accounts'}
                         </span>
                         <span className="site-group-header-right">
+                          {group.openTabCount > 0 && (
+                            <span
+                              className="site-group-open-tabs"
+                              title={`${group.openTabCount} browser tab${group.openTabCount === 1 ? '' : 's'} currently open on this site`}
+                            >
+                              🗔 {group.openTabCount} open tab{group.openTabCount === 1 ? '' : 's'}
+                            </span>
+                          )}
                           <span className="site-group-count">{group.accounts.length}</span>
                           {group.loginMapping && (
                             <button

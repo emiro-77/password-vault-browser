@@ -188,6 +188,10 @@ export interface SiteAccountsGroup {
   // Lets Settings visually distinguish login sites, show their main/related
   // URLs, and open the in-place editor.
   loginMapping?: LoginPageMapping | null;
+  // Number of browser tabs currently open on this site (matched by canonical
+  // account domain: login page + main site + related URLs). Shown in Settings
+  // › Site accounts so the user can verify active-tab status against reality.
+  openTabCount: number;
 }
 
 /** What kinds of browsing data to clear. */

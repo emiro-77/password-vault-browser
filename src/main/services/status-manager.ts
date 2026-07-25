@@ -36,6 +36,7 @@ export class StatusManager {
   getForDomain(
     domain: string,
     focusedTabId?: string | null,
+    liveTabIds?: Set<string>,
   ): (SiteLoginStatus & { loginLabel: string; loginUsername: string })[] {
     const db = getDatabase();
     this.expireStale(Date.now());
@@ -50,7 +51,7 @@ export class StatusManager {
     const now = Date.now();
 
     return rows.map(r => {
-      const currentStatus = this.computeCurrentStatus(r, now, focusedTabId);
+      const currentStatus = this.computeCurrentStatus(r, now, focusedTabId, liveTabIds);
 
       return {
         id: r.id,
@@ -97,7 +98,7 @@ export class StatusManager {
   /**
    * Get all site login statuses for all entries (for sidebar metadata).
    */
-  getAll(): (SiteLoginStatus & { loginLabel: string; loginUsername: string })[] {
+  getAll(liveTabIds?: Set<string>): (SiteLoginStatus & { loginLabel: string; loginUsername: string })[] {
     const db = getDatabase();
     this.expireStale(Date.now());
     const rows = db.prepare(`
@@ -110,7 +111,7 @@ export class StatusManager {
     const now = Date.now();
 
     return rows.map(r => {
-      const currentStatus = this.computeCurrentStatus(r, now);
+      const currentStatus = this.computeCurrentStatus(r, now, undefined, liveTabIds);
       return {
         id: r.id,
         loginEntryId: r.login_entry_id,
@@ -189,7 +190,11 @@ export class StatusManager {
   /**
    * Get status for a specific login entry on a specific domain.
    */
-  getForEntryAndDomain(loginEntryId: string, domain: string): SiteLoginStatus | null {
+  getForEntryAndDomain(
+    loginEntryId: string,
+    domain: string,
+    liveTabIds?: Set<string>,
+  ): SiteLoginStatus | null {
     const db = getDatabase();
     this.expireStale(Date.now());
     const row = db.prepare(
@@ -199,7 +204,7 @@ export class StatusManager {
     if (!row) return null;
 
     const now = Date.now();
-    const currentStatus = this.computeCurrentStatus(row, now);
+    const currentStatus = this.computeCurrentStatus(row, now, undefined, liveTabIds);
 
     return {
       id: row.id,
@@ -404,18 +409,32 @@ export class StatusManager {
    *   tab", and switching tabs moves it (never resets to never_used).
    *
    * - Settings › Site accounts (focusedTabId === undefined): shows every
-   *   account currently open in ANY tab. Each row that holds an active_tab_id
-   *   is "active_tab_open" — so several accounts can read active at once when
-   *   multiple tabs on the same URL are open.
+   *   account currently open in ANY tab. Each row that holds a LIVE
+   *   active_tab_id is "active_tab_open" — so several accounts can read active
+   *   at once when multiple tabs on the same URL are open.
+   *
+   * `liveTabIds` is the set of tab ids that are genuinely open RIGHT NOW (from
+   * tabManager.getLiveTabIds()). It is the single source of truth for "active":
+   * a stored active_tab_id is honoured ONLY if it is in this set. A stored id
+   * that is NOT live is stale (left over from a previous session / crash) and
+   * is ignored — the account falls through to "used"/its stored status. This
+   * is what guarantees "Active tab" always reflects the REAL open tabs and
+   * clears phantom actives. When `liveTabIds` is omitted (e.g. pure unit tests
+   * / legacy callers), every stored active_tab_id is trusted as before.
    *
    * Rules (both modes):
    * - After 24h from the first login, any active/used/logged_in status resets
    *   to "never_used".
-   * - A previously logged-in account whose tab has closed (active_tab_id NULL)
-   *   is still within its window -> "used" (red).
+   * - A previously logged-in account whose tab has closed (active_tab_id NULL
+   *   or stale) is still within its window -> "used" (red).
    * - Otherwise the stored status stands.
    */
-  private computeCurrentStatus(row: any, nowMs: number, focusedTabId?: string | null): LoginStatus {
+  private computeCurrentStatus(
+    row: any,
+    nowMs: number,
+    focusedTabId?: string | null,
+    liveTabIds?: Set<string>,
+  ): LoginStatus {
     // 24h window check: once the window lapses, the account is "never_used".
     if (row.logged_in_until) {
       const untilMs = new Date(row.logged_in_until).getTime();
@@ -424,7 +443,14 @@ export class StatusManager {
       }
     }
 
-    if (row.active_tab_id) {
+    // A stored active_tab_id only counts as active if that tab is genuinely
+    // open right now. When liveTabIds is provided and the id isn't in it, the
+    // link is stale → treat this row as "no active tab" (falls through below).
+    const hasLiveActiveTab =
+      !!row.active_tab_id &&
+      (liveTabIds === undefined || liveTabIds.has(row.active_tab_id));
+
+    if (hasLiveActiveTab) {
       // Sidebar mode: only the focused tab's account is "active"; the other
       // open-tab accounts are "used". Settings mode (focusedTabId undefined):
       // every open-tab account is "active".

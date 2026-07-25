@@ -635,6 +635,34 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   `category_accounts`, `categories`, `bookmarks`, `site_login_status`,
   `site_rules` and `login_entries`. It is explicit-only (never part of the
   default clear-all) to avoid accidental data loss (v1.1.7)
+- ✅ **"Active tab" now reflects the REAL open tabs, never stale data +
+  per-site open-tab counts (v1.1.8)**: after a crash / hard kill the `tabs`
+  table and each `site_login_status.active_tab_id` could survive into the next
+  launch, so several accounts wrongly showed "Active tab" even with only one
+  (or zero) tabs actually open. The active-tab state is now RECONCILED against
+  the live, in-memory open tabs — the single source of truth — instead of
+  trusting the stored id alone:
+  (a) *Live-tab reconciliation* — `computeCurrentStatus(row, nowMs,
+  focusedTabId?, liveTabIds?)` gained a `liveTabIds` set (from
+  `tabManager.getLiveTabIds()`); a stored `active_tab_id` is honoured ONLY if
+  that tab is genuinely open right now. A stale id is ignored and the account
+  falls through to "used"/its stored status. The status reads
+  (`STATUS_GET_FOR_DOMAIN`, `STATUS_GET_ALL`, Settings › Site accounts) all
+  pass the live set and first call `tabManager.reconcileStatusActiveTabs()`,
+  which NULLs stale `active_tab_id` links in the DB so the persisted state
+  self-heals.
+  (b) *Clean slate at boot* — on startup (before any tab exists)
+  `tabManager.purgeOrphanedPersistedTabs()` deletes leftover `tabs` rows and
+  `reconcileStatusActiveTabs()` clears every stale link, so a fresh launch
+  starts with zero phantom actives. Closing the last tab now also refreshes via
+  the global `getAll()` path so its "Active tab" flag clears immediately.
+  (c) *Open-tab count per site* — Settings › Site accounts now shows a green
+  "🗔 N open tab(s)" badge per site (`SiteAccountsGroup.openTabCount` via
+  `tabManager.countOpenTabsForCanonicalDomain()`), matched by canonical account
+  domain (login page + main site + related URLs), making it easy to verify that
+  active-tab status agrees with the number of tabs really open. New
+  reconciliation unit tests in `tests/expiry-logic.test.ts`
+  (stale-ignored / one-open-tab-single-active / no-live-tabs) (v1.1.8)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

@@ -28,12 +28,19 @@ import { loginEntryManager } from '../services/login-entry-manager';
 import { statusManager } from '../services/status-manager';
 import { sessionManager } from '../services/session-manager';
 import { loginPageManager } from '../services/login-page-manager';
+import { tabManager } from '../services/tab-manager';
 import { buildEncryptedExport, importEncryptedBackup, wipeAllVaultData } from '../services/vault-transfer';
 
 export function registerSettingsIpc(): void {
   // ---- Site account management ----
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SITE_ACCOUNTS, async (): Promise<IpcResponse<SiteAccountsGroup[]>> => {
     try {
+      // Self-heal any active_tab_id left over from a previous session/crash so
+      // Settings can never show phantom "Active tab" flags, then read against
+      // the genuinely-open tabs.
+      tabManager.reconcileStatusActiveTabs();
+      const liveTabIds = tabManager.getLiveTabIds();
+
       const entries = loginEntryManager.listAll();
 
       // Group entries by their (site) domain. '' = unscoped/legacy accounts.
@@ -49,12 +56,15 @@ export function registerSettingsIpc(): void {
         let loggedInUntil: string | null = null;
         let isActiveTab = false;
         if (domain) {
-          const st = statusManager.getForEntryAndDomain(entry.id, domain);
+          const st = statusManager.getForEntryAndDomain(entry.id, domain, liveTabIds);
           if (st) {
             status = st.status;
             lastUsedAt = st.lastUsedAt;
             loggedInUntil = st.loggedInUntil;
-            isActiveTab = st.status === 'active_tab_open' || !!st.activeTabId;
+            // Only a LIVE active tab counts — a stale stored active_tab_id must
+            // not mark the account active (the status above is already
+            // reconciled, so trust the computed status here).
+            isActiveTab = st.status === 'active_tab_open';
           }
         }
 
@@ -107,6 +117,7 @@ export function registerSettingsIpc(): void {
           domain,
           accounts,
           loginMapping: (domain && mappingByDomain.get(domain)) || null,
+          openTabCount: domain ? tabManager.countOpenTabsForCanonicalDomain(domain) : 0,
         }))
         .sort((a, b) => {
           if (a.domain === '') return 1;
@@ -195,6 +206,9 @@ export function registerSettingsIpc(): void {
       if (!req?.loginEntryId || !req?.domain) {
         return { success: false, error: 'A site (domain) is required to set status.' };
       }
+      // Clear any stale active_tab_id first so a phantom active tab from a
+      // previous session can't wrongly block a legitimate status change.
+      tabManager.reconcileStatusActiveTabs();
       statusManager.changeStatus(req.loginEntryId, req.domain, req.status);
       return { success: true };
     } catch (err: any) {
@@ -208,6 +222,8 @@ export function registerSettingsIpc(): void {
       if (!req?.loginEntryId || !req?.domain) {
         return { success: false, error: 'A site (domain) is required to clear the timer.' };
       }
+      // Clear any stale active_tab_id first (same reasoning as set-status).
+      tabManager.reconcileStatusActiveTabs();
       statusManager.clearTimer(req.loginEntryId, req.domain);
       return { success: true };
     } catch (err: any) {

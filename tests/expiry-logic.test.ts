@@ -33,8 +33,8 @@ interface StatusRow {
   active_tab_id: string | null;
 }
 
-// Faithful mirror of StatusManager.computeCurrentStatus(row, nowMs).
-// Mirror of StatusManager.computeCurrentStatus(row, nowMs, focusedTabId).
+// Faithful mirror of
+// StatusManager.computeCurrentStatus(row, nowMs, focusedTabId, liveTabIds).
 //
 // `focusedTabId` selects the "active" interpretation:
 //  - VAULT SIDEBAR (focusedTabId provided): only the focused tab's account is
@@ -42,7 +42,18 @@ interface StatusRow {
 //    active tab shown.
 //  - SETTINGS › Site accounts (focusedTabId === undefined): every open-tab
 //    account is "active_tab_open" -> multiple active tabs shown.
-function computeCurrentStatus(row: StatusRow, nowMs: number, focusedTabId?: string | null): LoginStatus {
+//
+// `liveTabIds` is the set of tab ids GENUINELY open right now. A stored
+// active_tab_id counts as active ONLY if it is in this set — a stale id (left
+// over from a previous session / crash) is ignored, so "Active tab" always
+// reflects the REAL open tabs. When `liveTabIds` is omitted, every stored
+// active_tab_id is trusted (legacy / pure-logic callers).
+function computeCurrentStatus(
+  row: StatusRow,
+  nowMs: number,
+  focusedTabId?: string | null,
+  liveTabIds?: Set<string>,
+): LoginStatus {
   // 24h window check: once the window lapses, the account is "never_used".
   if (row.logged_in_until) {
     const untilMs = new Date(row.logged_in_until).getTime();
@@ -50,13 +61,17 @@ function computeCurrentStatus(row: StatusRow, nowMs: number, focusedTabId?: stri
       return 'never_used';
     }
   }
-  if (row.active_tab_id) {
+  const hasLiveActiveTab =
+    !!row.active_tab_id &&
+    (liveTabIds === undefined || liveTabIds.has(row.active_tab_id));
+  if (hasLiveActiveTab) {
     if (focusedTabId === undefined || row.active_tab_id === focusedTabId) {
       return 'active_tab_open';
     }
     return 'used';
   }
-  // A previously logged-in/active account whose tab has closed -> "used".
+  // A previously logged-in/active account whose tab has closed (or whose stored
+  // active_tab_id is stale) -> "used" while still within the window.
   if (row.status === 'logged_in' || row.status === 'active_tab_open') {
     return 'used';
   }
@@ -194,6 +209,57 @@ function test_boundary_at_expiry() {
   console.log('  ✓ boundary: active at exact expiry, never_used 1ms past');
 }
 
+// ---- Live-tab reconciliation (stale active_tab_id ignored) ----
+
+// A stored active_tab_id that is NOT in the live set (phantom left over from a
+// previous session) must NOT read as "Active tab". Only the genuinely-open
+// tab's account is active.
+function test_stale_active_tab_ignored_when_not_live() {
+  const now = Date.now();
+  const live = new Set<string>(['tab-1']); // only tab-1 is genuinely open
+  const rowLive: StatusRow = { status: 'active_tab_open', logged_in_until: future(), active_tab_id: 'tab-1' };
+  const rowStaleA: StatusRow = { status: 'active_tab_open', logged_in_until: future(), active_tab_id: 'tab-old-2' };
+  const rowStaleB: StatusRow = { status: 'active_tab_open', logged_in_until: future(), active_tab_id: 'tab-old-3' };
+  // Settings interpretation (focusedTabId omitted): only the live one is active.
+  assert(computeCurrentStatus(rowLive, now, undefined, live) === 'active_tab_open',
+    'the genuinely-open tab account is active');
+  assert(computeCurrentStatus(rowStaleA, now, undefined, live) === 'used',
+    'stale active_tab_id #1 must NOT be active (reads used)');
+  assert(computeCurrentStatus(rowStaleB, now, undefined, live) === 'used',
+    'stale active_tab_id #2 must NOT be active (reads used)');
+  console.log('  ✓ stale active_tab_ids ignored -> only the one real open tab is active');
+}
+
+// With one real open tab, the sidebar shows exactly ONE "Active tab" even if
+// several rows carry stale active_tab_ids (the user's exact bug: 1 tab open,
+// but 3 accounts showed "Active tab").
+function test_one_open_tab_yields_single_active_despite_stale() {
+  const now = Date.now();
+  const live = new Set<string>(['tab-1']);
+  const rows: StatusRow[] = [
+    { status: 'active_tab_open', logged_in_until: future(), active_tab_id: 'tab-1' },      // real
+    { status: 'active_tab_open', logged_in_until: future(), active_tab_id: 'ghost-a' },    // stale
+    { status: 'active_tab_open', logged_in_until: future(), active_tab_id: 'ghost-b' },    // stale
+  ];
+  const focused = 'tab-1';
+  const activeCount = rows
+    .map(r => computeCurrentStatus(r, now, focused, live))
+    .filter(s => s === 'active_tab_open').length;
+  assert(activeCount === 1, `exactly one Active tab expected, got ${activeCount}`);
+  console.log('  ✓ one open tab -> exactly ONE Active tab (stale rows demoted)');
+}
+
+// When liveTabIds is empty (no tabs open at all), NO account is active even if
+// rows still carry stored active_tab_ids from a crashed session.
+function test_no_live_tabs_means_no_active() {
+  const now = Date.now();
+  const live = new Set<string>();
+  const row: StatusRow = { status: 'active_tab_open', logged_in_until: future(), active_tab_id: 'tab-dead' };
+  assert(computeCurrentStatus(row, now, undefined, live) === 'used',
+    'with no live tabs a stored active_tab_id must not be active');
+  console.log('  ✓ no live tabs -> no Active tab (stored ids treated stale)');
+}
+
 function runAllTests() {
   console.log('=== Status Manager Expiry + Stored Active-Tab Tests ===');
   try {
@@ -203,6 +269,9 @@ function runAllTests() {
     test_sidebar_shows_only_focused_tab_active();
     test_sidebar_switch_moves_single_active();
     test_closing_one_tab_only_demotes_that_account();
+    test_stale_active_tab_ignored_when_not_live();
+    test_one_open_tab_yields_single_active_despite_stale();
+    test_no_live_tabs_means_no_active();
     test_resets_to_never_used_after_24h();
     test_resets_after_many_days();
     test_never_used_unchanged();
