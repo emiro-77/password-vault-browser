@@ -592,6 +592,23 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   its live key — accurate; and the Settings `changeStatus`/`clearTimer` guards
   now protect any account with a *live* tab instead of a stale `active_tab_id`.
   Covered by new multi-tab cases in `tests/expiry-logic.test.ts` (v1.1.5)
+- ✅ **Multi-tab active status — reworked to the reliable STORED model
+  (v1.1.6)**: v1.1.5 derived "active" from the live open tabs, but that made
+  the active-tab indicator disappear entirely and still reset every account to
+  "never used" on tab switch (the derived key depended on a tab's live URL,
+  which could drift out of sync). v1.1.6 keeps the simple, reliable STORED
+  model — each `(account, domain)` row holds its OWN `active_tab_id`, and a row
+  with a non-null `active_tab_id` computes to `active_tab_open` — but simply
+  STOPS demoting the other accounts in `markLoggedIn`. Because each row owns its
+  own active-tab link (the per-account "unique hash" of *this account is logged
+  in, in this tab*), TWO tabs on the SAME site — each logged in with a DIFFERENT
+  account — now BOTH show as active tabs, and switching between them never
+  clears anyone's status (switching doesn't touch `active_tab_id`). Closing a
+  tab clears only that tab's row (`tabManager.closeTab`). Status is still
+  written AND read under the canonical account domain (the v1.1.3 fix). The
+  dead derived-key helper (`getActiveAccountKeys`) was removed; `syncTabUrl`
+  stays to keep tab dedup / close accurate. Multi-tab cases in
+  `tests/expiry-logic.test.ts` updated to the stored model (v1.1.6)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

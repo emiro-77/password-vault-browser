@@ -362,13 +362,10 @@ export class TabManager {
 
   /**
    * Sync a tab's in-memory URL/domain from an actual webview navigation
-   * (did-navigate / did-navigate-in-page). CRITICAL for the derived active-tab
-   * status: `getActiveAccountKeys()` computes each open tab's canonical account
-   * domain from `entry.info.currentUrl`. If that stays stale (e.g. after a
-   * login-page → main-site redirect, or any in-page SPA navigation), the live
-   * key no longer matches the stored status key and every account on the domain
-   * wrongly computes to "never used". Keeping the in-memory URL in lock-step
-   * with the real page fixes that.
+   * (did-navigate / did-navigate-in-page). Keeps `entry.info.currentUrl` in
+   * lock-step with the real page after redirects / in-page SPA navigations, so
+   * tab dedup (findTabByLoginAndDomain) and the canonical account domain used
+   * when a tab closes stay accurate instead of matching the stale opening URL.
    */
   syncTabUrl(tabId: string, url: string): void {
     const entry = this.tabs.get(tabId);
@@ -454,30 +451,6 @@ export class TabManager {
       }
     }
     return null;
-  }
-
-  /**
-   * Return the set of currently-OPEN login-entry tabs as canonical
-   * "account keys" — `${loginEntryId}::${canonicalAccountDomain}`.
-   *
-   * This is the LIVE source of truth for which accounts are "active tab open":
-   * an account is active on a domain iff some open tab holds it. Because the key
-   * includes the account id, TWO tabs on the SAME domain with DIFFERENT accounts
-   * both count as active — which the single stored `active_tab_id` per
-   * (account,domain) row could never represent. Status reads overlay this set so
-   * every live tab's account shows as active, and closing one tab only demotes
-   * that account.
-   */
-  getActiveAccountKeys(): Set<string> {
-    const keys = new Set<string>();
-    for (const [, entry] of this.tabs) {
-      const { loginEntryId, currentUrl, domain } = entry.info;
-      if (!loginEntryId) continue;
-      const canonical =
-        loginPageManager.canonicalAccountDomain(currentUrl || '') || domain || '';
-      if (canonical) keys.add(`${loginEntryId}::${canonical}`);
-    }
-    return keys;
   }
 
   /**

@@ -7,12 +7,21 @@
 // - "logged_in" status expires after 24 hours (LOGGED_IN_DURATION_MS)
 // - Status is app-managed state, not real auth detection
 // - The app explicitly labels this in the UI
+//
+// Active-tab model (multi-tab):
+// - Each (login_entry_id, domain) row stores its OWN `active_tab_id`. That row
+//   is the "unique hash" for "this account is logged in, in this tab". A row
+//   with a non-null active_tab_id computes to "active_tab_open".
+// - Because the active tab is a STORED per-row fact (not derived from other
+//   accounts), MULTIPLE accounts on the SAME domain can each be active at the
+//   same time — one per open tab. markLoggedIn therefore does NOT demote the
+//   other accounts on the domain; each tab owns its own row's active_tab_id and
+//   only that row is cleared when its tab closes (see tabManager.closeTab).
 
 import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../db';
 import { SiteLoginStatus, LoginStatus } from '../../shared/types';
 import { LOGGED_IN_DURATION_MS } from '../../shared/constants';
-import { tabManager } from './tab-manager';
 
 export class StatusManager {
   /**
@@ -31,11 +40,9 @@ export class StatusManager {
     `).all(domain) as any[];
 
     const now = Date.now();
-    const liveKeys = this.liveActiveKeys();
 
     return rows.map(r => {
-      // Compute current status (overlaying the live open-tab set)
-      const currentStatus = this.computeCurrentStatus(r, now, liveKeys);
+      const currentStatus = this.computeCurrentStatus(r, now);
 
       return {
         id: r.id,
@@ -63,10 +70,9 @@ export class StatusManager {
     ).all(loginEntryId) as any[];
 
     const now = Date.now();
-    const liveKeys = this.liveActiveKeys();
 
     return rows.map(r => {
-      const currentStatus = this.computeCurrentStatus(r, now, liveKeys);
+      const currentStatus = this.computeCurrentStatus(r, now);
       return {
         id: r.id,
         loginEntryId: r.login_entry_id,
@@ -94,10 +100,9 @@ export class StatusManager {
     `).all() as any[];
 
     const now = Date.now();
-    const liveKeys = this.liveActiveKeys();
 
     return rows.map(r => {
-      const currentStatus = this.computeCurrentStatus(r, now, liveKeys);
+      const currentStatus = this.computeCurrentStatus(r, now);
       return {
         id: r.id,
         loginEntryId: r.login_entry_id,
@@ -116,12 +121,11 @@ export class StatusManager {
   /**
    * Mark a login entry as logged-in (active) on a domain, in the tab `tabId`.
    *
-   * IMPORTANT (multi-tab design): we DO NOT demote other accounts here. Which
-   * accounts are "active tab open" on a domain is DERIVED from the live open
-   * tabs (see computeCurrentStatus + tabManager.getActiveAccountKeys), so two
-   * tabs on the same domain with different accounts can BOTH be active at once.
-   * This method only records that this account has been logged in and (re)opens
-   * its 24h window; `active_tab_id` is kept only as a legacy/last-tab hint.
+   * IMPORTANT (multi-tab design): we do NOT demote the OTHER accounts on this
+   * domain. Each (account, domain) row stores its OWN `active_tab_id`, so two
+   * tabs on the same domain — each logged in with a different account — can
+   * BOTH be active at the same time (one row per tab). This row's active_tab_id
+   * is set to `tabId`; it is only cleared when THIS tab closes.
    *
    * The 24h window is tracked from the FIRST login: `first_login_at` and
    * `logged_in_until` are only set the first time (or once a previous window
@@ -218,13 +222,10 @@ export class StatusManager {
     ).get(loginEntryId, domain) as any;
 
     // Guard: never let the caller set/keep 'active_tab_open' manually, and
-    // never allow changing an account that currently has a LIVE open tab. The
-    // active state is derived from the live tabs (not the stored active_tab_id),
-    // so check the live key — otherwise a stale active_tab_id from a closed tab
-    // would wrongly block editing, and a genuinely-open second tab on the same
-    // domain wouldn't be protected.
-    const live = this.liveActiveKeys().has(`${loginEntryId}::${domain}`);
-    if (live) {
+    // never allow changing a row that currently holds an active tab (its own
+    // stored active_tab_id). The tab must be closed / switched away first.
+    const current = row ? this.computeCurrentStatus(row, Date.now()) : 'never_used';
+    if (current === 'active_tab_open' || (row && row.active_tab_id)) {
       throw new Error('Cannot change the status of the active tab. Switch to another account first.');
     }
     if (status === 'active_tab_open') {
@@ -263,9 +264,9 @@ export class StatusManager {
     ).get(loginEntryId, domain) as any;
     if (!row) return;
 
-    // Active state is derived from the live open tabs, so protect the timer of
-    // any account that currently has an open tab (not the stale active_tab_id).
-    if (this.liveActiveKeys().has(`${loginEntryId}::${domain}`)) {
+    // A row holding an active tab (its own stored active_tab_id) may not have
+    // its timer cleared — close/switch away from that tab first.
+    if (row.active_tab_id) {
       throw new Error('Cannot clear the timer of the active tab. Switch to another account first.');
     }
 
@@ -382,36 +383,21 @@ export class StatusManager {
   }
 
   /**
-   * The set of "${loginEntryId}::${domain}" account keys that are LIVE right
-   * now (an open tab holds them). Derived from the tab manager, this is the
-   * authoritative source for "active tab open" — see computeCurrentStatus.
-   * Wrapped in try/catch so status reads never fail if the tab manager isn't
-   * ready (e.g. very early startup).
-   */
-  private liveActiveKeys(): Set<string> {
-    try {
-      return tabManager.getActiveAccountKeys();
-    } catch {
-      return new Set<string>();
-    }
-  }
-
-  /**
-   * Compute the effective status considering the 24h expiry window and the LIVE
-   * open tabs. Internal helper.
+   * Compute the effective status considering the 24h expiry window and the
+   * STORED active-tab link. Internal helper.
    *
    * Rules:
    * - After 24h from the first login, any active/used/logged_in status resets
    *   to "never_used".
-   * - If a LIVE tab currently holds this (account, domain) -> "active_tab_open".
-   *   Multiple accounts on the same domain can be active at once (one per tab).
-   * - A previously logged-in account with NO live tab has been superseded and
+   * - If this row holds an active tab (its own stored `active_tab_id`) ->
+   *   "active_tab_open". Because each (account, domain) row owns its own
+   *   active_tab_id, MULTIPLE accounts on the same domain can be active at once
+   *   (one per open tab) — no demotion of the others.
+   * - A previously logged-in account whose tab has closed (active_tab_id NULL)
    *   is still within its window -> "used" (red).
    * - Otherwise the stored status stands.
-   *
-   * `liveKeys` is passed in so a single read can compute it once for all rows.
    */
-  private computeCurrentStatus(row: any, nowMs: number, liveKeys?: Set<string>): LoginStatus {
+  private computeCurrentStatus(row: any, nowMs: number): LoginStatus {
     // 24h window check: once the window lapses, the account is "never_used".
     if (row.logged_in_until) {
       const untilMs = new Date(row.logged_in_until).getTime();
@@ -420,15 +406,14 @@ export class StatusManager {
       }
     }
 
-    // Active iff a LIVE open tab currently holds this exact account+domain.
-    const keys = liveKeys ?? this.liveActiveKeys();
-    if (keys.has(`${row.login_entry_id}::${row.domain}`)) {
+    // Active iff THIS row currently holds an open tab (stored fact).
+    if (row.active_tab_id) {
       return 'active_tab_open';
     }
 
-    // A previously logged-in/active account that no longer has a live tab has
-    // been used (and superseded) -> "used" (red), while still within window.
-    if (row.status === 'logged_in' || row.status === 'active_tab_open' || row.active_tab_id) {
+    // A previously logged-in/active account whose tab has closed is "used"
+    // (red) while still within its window.
+    if (row.status === 'logged_in' || row.status === 'active_tab_open') {
       return 'used';
     }
 
