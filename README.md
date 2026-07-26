@@ -753,6 +753,13 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   Save-bookmark modal's own `setOverlay` is no longer raced. Each folder entry
   offers Open / Open in New Tab / Copy Address; the old HTML dropdown, click-away
   backdrop and their CSS/`onOverlayChange` wiring were removed. (v1.2.2)
+- ✅ **App icon updated to the Vault Browser logo (v1.2.3)**: replaced the app
+  icon with the official blue globe + shield "Vault Browser" logo. The source
+  `resources/icon.png` is the new 1024×1024 logo; `build/icon.ico` was
+  regenerated multi-size (16–256px) from it; `build/icon.png` and the
+  `dist/icon.png` runtime window/taskbar icon use it too. The portable and
+  installable `.exe`, installer/uninstaller and the running window all now show
+  the new logo. (v1.2.3)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to
