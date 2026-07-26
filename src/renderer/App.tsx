@@ -63,6 +63,11 @@ export default function App() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [domainStatuses, setDomainStatuses] = useState<EntryWithStatus[]>([]);
 
+  // All accounts across every site (unscoped). Needed so a GLOBAL category can
+  // show its member accounts on sites where they haven't been used yet — those
+  // accounts aren't in the per-site `domainStatuses` list.
+  const [allEntries, setAllEntries] = useState<LoginEntry[]>([]);
+
   // Bug 3: Save-bookmark modal state. When open, holds the existing folder
   // names so the user can place the bookmark; null = modal closed.
   const [bookmarkModalFolders, setBookmarkModalFolders] = useState<string[] | null>(null);
@@ -216,6 +221,11 @@ export default function App() {
     //    mismatched entry list.
     setLoginEntries(entries);
     setDomainStatuses(merged);
+
+    // 4. Also refresh the global account list (used to resolve global-category
+    //    members that aren't yet used on this site).
+    const allRes = await api.credentials.list();
+    if (allRes.success && allRes.data) setAllEntries(allRes.data);
   }, [api]);
 
   // Resolve the CANONICAL account domain for a URL (via the login-page
@@ -690,7 +700,16 @@ export default function App() {
     const foldersRes = await api.bookmarks.folders();
     const folders = (foldersRes.success && foldersRes.data) ? foldersRes.data : [];
     setBookmarkModalFolders(folders);
+    // Detach the native BrowserView so the HTML modal renders ON TOP of the
+    // web page (otherwise the page draws over the modal).
+    api.tabs.setOverlay(true);
   }, [api, currentUrl, bookmarks, loadBookmarks]);
+
+  // Close the Save-bookmark modal and reattach the BrowserView.
+  const handleCloseBookmarkModal = useCallback(() => {
+    setBookmarkModalFolders(null);
+    api.tabs.setOverlay(false);
+  }, [api]);
 
   // Confirm handler for the Save-bookmark modal (#3.2).
   const handleConfirmSaveBookmark = useCallback(async (draft: BookmarkDraft) => {
@@ -701,6 +720,7 @@ export default function App() {
     });
     if (res.success) loadBookmarks();
     setBookmarkModalFolders(null);
+    api.tabs.setOverlay(false);
   }, [api, loadBookmarks]);
 
   // Remove a bookmark via the X button in the bookmarks bar (#3.1).
@@ -758,15 +778,19 @@ export default function App() {
   }, [api]);
 
   const handleSaveCategory = useCallback(async (draft: {
-    name: string; icon: string; scope: 'global' | 'private'; accountIds: string[];
+    name: string; icon: string; scope: 'global' | 'private'; accountIds: string[]; domain: string;
   }) => {
+    // For a private category use the site chosen in the modal; global = no site.
+    const privateDomain = draft.scope === 'private'
+      ? (draft.domain || accountDomain || undefined)
+      : undefined;
     if (editingCategory) {
       await api.categories.update({
         id: editingCategory.id,
         name: draft.name,
         icon: draft.icon,
         scope: draft.scope,
-        domain: draft.scope === 'private' ? (accountDomain || undefined) : undefined,
+        domain: privateDomain,
         accountIds: draft.accountIds,
       });
     } else {
@@ -774,7 +798,7 @@ export default function App() {
         name: draft.name,
         icon: draft.icon,
         scope: draft.scope,
-        domain: draft.scope === 'private' ? (accountDomain || undefined) : undefined,
+        domain: privateDomain,
         accountIds: draft.accountIds,
       });
     }
@@ -793,13 +817,45 @@ export default function App() {
   }, [api, activeCategoryId, accountDomain, loadCategories]);
 
   // Filter the sidebar entries by the active category (null = show all).
+  //
+  // GLOBAL categories behave like a portable account set: on ANY site, every
+  // member account is shown as if it belonged to this site. Accounts that have
+  // never been used here won't be in `domainStatuses`, so we resolve them from
+  // the full account list (`allEntries`) and mark them "never_used" for this
+  // site. Logging in with one then registers it for the site (the normal
+  // status-changed flow reloads statuses).
+  //
+  // PRIVATE categories only make sense on their own site, so they keep the
+  // simple per-site filter.
   const visibleStatuses = React.useMemo(() => {
     if (!activeCategoryId) return domainStatuses;
     const cat = categories.find(c => c.id === activeCategoryId);
     if (!cat) return domainStatuses;
+
     const idSet = new Set(cat.accountIds);
+
+    if (cat.scope === 'global') {
+      // Index the current site's statuses so we can attach them where present.
+      const byId = new Map(domainStatuses.map(s => [s.entry.id, s]));
+      const result: EntryWithStatus[] = [];
+      for (const accId of cat.accountIds) {
+        const existing = byId.get(accId);
+        if (existing) {
+          result.push(existing);
+          continue;
+        }
+        // Member account not used on this site yet — surface it as never_used.
+        const entry = allEntries.find(e => e.id === accId);
+        if (entry) {
+          result.push({ entry, status: 'never_used', statusInfo: null });
+        }
+      }
+      return result;
+    }
+
+    // Private category: only this site's accounts.
     return domainStatuses.filter(s => idSet.has(s.entry.id));
-  }, [activeCategoryId, categories, domainStatuses]);
+  }, [activeCategoryId, categories, domainStatuses, allEntries]);
 
   // ---- Render ----
 
@@ -985,8 +1041,9 @@ export default function App() {
       {categoryModalOpen && (
         <CategoryModal
           editing={editingCategory}
-          accounts={loginEntries}
+          accounts={allEntries.length ? allEntries : loginEntries}
           currentDomain={currentDomain}
+          openDomains={Array.from(new Set(tabs.map(t => t.domain).filter(Boolean) as string[]))}
           onCancel={handleCloseCategoryModal}
           onSave={handleSaveCategory}
         />
@@ -1010,7 +1067,7 @@ export default function App() {
           url={currentUrl}
           defaultTitle={currentTitle && currentTitle !== 'Loading...' ? currentTitle : (currentDomain || currentUrl)}
           folders={bookmarkModalFolders}
-          onCancel={() => setBookmarkModalFolders(null)}
+          onCancel={handleCloseBookmarkModal}
           onSave={handleConfirmSaveBookmark}
         />
       )}

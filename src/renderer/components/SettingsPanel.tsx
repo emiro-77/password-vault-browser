@@ -56,8 +56,23 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [accountsLoading, setAccountsLoading] = useState(true);
   // Filter: show all sites, or only sites that are saved login pages.
   const [siteFilter, setSiteFilter] = useState<'all' | 'login'>('all');
+  // Free-text search over site (domain) and account email/label (#4).
+  const [search, setSearch] = useState('');
+  // Collapsed site groups (by domain key). Collapsed = minimized section (#4).
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // The login-page mapping being edited in-place (Settings editor), or null.
   const [editingMapping, setEditingMapping] = useState<LoginPageMapping | null>(null);
+
+  const groupKey = (g: SiteAccountsGroup) => g.domain || '(unscoped)';
+
+  const toggleCollapsed = useCallback((key: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   const loadAccounts = useCallback(async () => {
     setAccountsLoading(true);
@@ -69,7 +84,33 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   const loginSiteCount = groups.filter(g => g.loginMapping).length;
-  const visibleGroups = siteFilter === 'login' ? groups.filter(g => g.loginMapping) : groups;
+
+  // Apply the login-site filter first, then the free-text search (#4). A group
+  // matches if its domain contains the query OR it has ≥1 account whose
+  // email/username or label matches. When only accounts match, the group is
+  // narrowed to just those accounts; when the domain itself matches, all its
+  // accounts are kept.
+  const visibleGroups = React.useMemo(() => {
+    const base = siteFilter === 'login' ? groups.filter(g => g.loginMapping) : groups;
+    const q = search.trim().toLowerCase();
+    if (!q) return base;
+    const out: SiteAccountsGroup[] = [];
+    for (const g of base) {
+      const domainMatch = (g.domain || 'unscoped').toLowerCase().includes(q);
+      if (domainMatch) {
+        out.push(g);
+        continue;
+      }
+      const matchedAccounts = g.accounts.filter(a =>
+        a.usernameOrEmail.toLowerCase().includes(q) ||
+        a.label.toLowerCase().includes(q)
+      );
+      if (matchedAccounts.length > 0) {
+        out.push({ ...g, accounts: matchedAccounts });
+      }
+    }
+    return out;
+  }, [groups, siteFilter, search]);
 
   // ---- Edit / delete account ----
   // The row being edited (account + its site domain), or null when closed.
@@ -197,6 +238,29 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 </button>
               </div>
 
+              {/* Search bar (#4): filter by site name or account email/label. */}
+              <div className="site-search">
+                <span className="site-search-icon" aria-hidden="true">🔍</span>
+                <input
+                  className="site-search-input"
+                  type="search"
+                  placeholder="Search sites or emails…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  aria-label="Search sites or account emails"
+                />
+                {search && (
+                  <button
+                    className="site-search-clear"
+                    onClick={() => setSearch('')}
+                    aria-label="Clear search"
+                    title="Clear search"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
               {accountsLoading ? (
                 <div className="settings-empty">Loading…</div>
               ) : visibleGroups.length === 0 ? (
@@ -205,16 +269,29 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 </div>
               ) : (
                 <div className="site-groups">
-                  {visibleGroups.map(group => (
+                  {visibleGroups.map(group => {
+                    const key = groupKey(group);
+                    // While searching, force groups open so matches are visible.
+                    const isCollapsed = !search.trim() && collapsed.has(key);
+                    return (
                     <div
-                      key={group.domain || '(unscoped)'}
-                      className={`site-group${group.loginMapping ? ' is-login-site' : ''}`}
+                      key={key}
+                      className={`site-group${group.loginMapping ? ' is-login-site' : ''}${isCollapsed ? ' is-collapsed' : ''}`}
                     >
                       <div className="site-group-header">
-                        <span className="site-group-domain">
-                          {group.loginMapping && <span className="login-site-badge" title="Saved login page">🔑</span>}
-                          {group.domain || 'Unscoped / legacy accounts'}
-                        </span>
+                        <button
+                          className="site-group-toggle"
+                          onClick={() => toggleCollapsed(key)}
+                          aria-expanded={!isCollapsed}
+                          aria-label={isCollapsed ? `Expand ${group.domain || 'unscoped'}` : `Collapse ${group.domain || 'unscoped'}`}
+                          title={isCollapsed ? 'Expand' : 'Collapse'}
+                        >
+                          <span className="site-group-caret">{isCollapsed ? '▸' : '▾'}</span>
+                          <span className="site-group-domain">
+                            {group.loginMapping && <span className="login-site-badge" title="Saved login page">🔑</span>}
+                            {group.domain || 'Unscoped / legacy accounts'}
+                          </span>
+                        </button>
                         <span className="site-group-header-right">
                           {group.openTabCount > 0 && (
                             <span
@@ -238,6 +315,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                         </span>
                       </div>
 
+                      {!isCollapsed && (<>
                       {/* Visual mapping: main URL + related URLs (with overflow). */}
                       {group.loginMapping && (
                         <MappingUrls mapping={group.loginMapping} />
@@ -278,8 +356,10 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                           );
                         })}
                       </ul>
+                      </>)}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

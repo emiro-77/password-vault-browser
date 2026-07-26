@@ -42,9 +42,23 @@ export function registerSettingsIpc(): void {
       const liveTabIds = tabManager.getLiveTabIds();
 
       const entries = loginEntryManager.listAll();
+      const entryById = new Map(entries.map(e => [e.id, e]));
 
       // Group entries by their (site) domain. '' = unscoped/legacy accounts.
       const groups = new Map<string, SiteAccountInfo[]>();
+
+      // Track which (domain, accountId) pairs we've already emitted so an
+      // account isn't listed twice under the same site.
+      const seen = new Set<string>();
+
+      const pushInfo = (domain: string, info: SiteAccountInfo) => {
+        const key = `${domain}\u0000${info.loginEntryId}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const list = groups.get(domain);
+        if (list) list.push(info);
+        else groups.set(domain, [info]);
+      };
 
       for (const entry of entries) {
         const domain = entry.domain || '';
@@ -68,7 +82,7 @@ export function registerSettingsIpc(): void {
           }
         }
 
-        const info: SiteAccountInfo = {
+        pushInfo(domain, {
           loginEntryId: entry.id,
           label: entry.label,
           usernameOrEmail: entry.usernameOrEmail,
@@ -76,11 +90,29 @@ export function registerSettingsIpc(): void {
           lastUsedAt,
           loggedInUntil,
           isActiveTab,
-        };
+        });
+      }
 
-        const list = groups.get(domain);
-        if (list) list.push(info);
-        else groups.set(domain, [info]);
+      // Global-category accounts: once an account is USED on a site it gets a
+      // site_login_status row for that (account, domain). Even if the account's
+      // stored home domain is '' (a global account), surface it UNDER that site
+      // so it appears in the site's saved accounts list — matching the
+      // "first login registers it for that site" behaviour.
+      const allStatuses = statusManager.getAll(liveTabIds);
+      for (const st of allStatuses) {
+        const d = st.domain || '';
+        if (!d) continue; // no site to attach to
+        const entry = entryById.get(st.loginEntryId);
+        if (!entry) continue;
+        pushInfo(d, {
+          loginEntryId: entry.id,
+          label: entry.label,
+          usernameOrEmail: entry.usernameOrEmail,
+          status: st.status,
+          lastUsedAt: st.lastUsedAt,
+          loggedInUntil: st.loggedInUntil,
+          isActiveTab: st.status === 'active_tab_open',
+        });
       }
 
       // Sort accounts within each group by time-remaining, SHORTEST first.

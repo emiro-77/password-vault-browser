@@ -692,6 +692,31 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   dialog (Settings › Site accounts) now have a 👁️ / 🙈 toggle that switches the
   password field between hidden and plain text, working consistently in create
   and edit states. (v1.1.9)
+- ✅ **Bookmark modal z-order, global-category portability, private-category
+  site picker & Settings collapse/search (v1.2.0)**: four fixes.
+  (1) *Save-bookmark modal now renders on top* — the native `BrowserView` (the
+  web page) draws over the HTML chrome, so the Star modal appeared "behind" the
+  page (only the top bar / sidebar dimmed). Opening the modal now calls
+  `tabs.setOverlay(true)` (detaching the BrowserView) like every other modal,
+  and reattaches on save/cancel, so it appears above all components.
+  (2) *Global categories are now portable account sets* — a Global category
+  shows ALL its member accounts on EVERY site, as if registered there: accounts
+  already used on the site keep their real status, members never used here are
+  shown as "Never used" (resolved from the full account list, not just the
+  per-site list). Logging in with one for the first time records a
+  `site_login_status` row for the current canonical domain, and Settings ›
+  Site accounts now also groups accounts by their status-domain — so that
+  account appears under the site it was used on (deduped; orphaned status rows
+  ignored). New `tests/global-category.test.ts` locks in both rules.
+  (3) *Private-category site picker* — the New/Edit Category modal now has a
+  **site dropdown** populated from the currently-open tabs (plus the current
+  site and, when editing, the category's existing site). A private category is
+  tied to the chosen site and only shows in that site's vault sidebar.
+  (4) *Settings › Site accounts: collapse + search* — each site section can be
+  **minimized/expanded** via a caret in its header, and a **search bar**
+  filters by site name or account email/label (matching a site keeps all its
+  accounts; matching only accounts narrows the group; search forces groups
+  open). (v1.2.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

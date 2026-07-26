@@ -4,7 +4,7 @@
 // Lets the user name a category, pick accounts, choose an icon (from a basic
 // set or a custom uploaded image), and select Global vs Private visibility.
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Category, CategoryScope, LoginEntry } from '../../shared/types';
 
 const BASIC_ICONS = ['📁', '⭐', '💼', '🏦', '🛒', '🎮', '📧', '🔐', '☁️', '🌐', '👤', '❤️'];
@@ -14,6 +14,8 @@ export interface CategoryDraft {
   icon: string;
   scope: CategoryScope;
   accountIds: string[];
+  /** For private categories: the site this category is tied to. */
+  domain: string;
 }
 
 interface CategoryModalProps {
@@ -21,8 +23,10 @@ interface CategoryModalProps {
   editing: Category | null;
   /** Accounts available to add (already scoped to the current site). */
   accounts: LoginEntry[];
-  /** Current site host — needed for Private categories. */
+  /** Current site host — used as the default for Private categories. */
   currentDomain: string | null;
+  /** Domains of sites that are currently open (have tabs) — picker options. */
+  openDomains: string[];
   onCancel: () => void;
   onSave: (draft: CategoryDraft) => void;
 }
@@ -31,6 +35,7 @@ export default function CategoryModal({
   editing,
   accounts,
   currentDomain,
+  openDomains,
   onCancel,
   onSave,
 }: CategoryModalProps) {
@@ -40,6 +45,22 @@ export default function CategoryModal({
   const [accountIds, setAccountIds] = useState<string[]>(editing?.accountIds ?? []);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // For private categories: the chosen site. Defaults to the existing category's
+  // domain (edit), else the current site. The options are the open sites plus
+  // any already-selected domain (so an edit keeps its value even if that tab is
+  // closed).
+  const siteOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of openDomains) if (d) set.add(d);
+    if (currentDomain) set.add(currentDomain);
+    if (editing?.domain) set.add(editing.domain);
+    return Array.from(set).sort();
+  }, [openDomains, currentDomain, editing]);
+
+  const [privateDomain, setPrivateDomain] = useState<string>(
+    editing?.domain || currentDomain || (siteOptions[0] ?? '')
+  );
 
   const isCustomIcon = icon.startsWith('data:');
 
@@ -63,12 +84,19 @@ export default function CategoryModal({
 
   const handleSave = () => {
     if (!name.trim()) { setError('Please enter a category name.'); return; }
-    if (scope === 'private' && !currentDomain) {
-      setError('Open a website first to create a private (site-specific) category.');
+    if (scope === 'private') {
+      const chosen = (privateDomain || '').trim().toLowerCase();
+      if (!chosen) {
+        setError('Choose a site for this private category (open a website first).');
+        return;
+      }
+      onSave({ name: name.trim(), icon, scope, accountIds, domain: chosen });
       return;
     }
-    onSave({ name: name.trim(), icon, scope, accountIds });
+    onSave({ name: name.trim(), icon, scope, accountIds, domain: '' });
   };
+
+  const hasSiteOptions = siteOptions.length > 0;
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -108,15 +136,40 @@ export default function CategoryModal({
                 name="scope"
                 checked={scope === 'private'}
                 onChange={() => setScope('private')}
-                disabled={!currentDomain}
+                disabled={!hasSiteOptions}
               />
               <span>
-                <strong>Private</strong> — only on{' '}
-                {currentDomain ? <code>{currentDomain}</code> : 'the current site'}
+                <strong>Private</strong> — only on a chosen site
               </span>
             </label>
           </div>
         </div>
+
+        {/* Private-category site picker (#3): pick from open sites/tabs. */}
+        {scope === 'private' && (
+          <div className="modal-field">
+            <label className="modal-label">Site for this category</label>
+            {hasSiteOptions ? (
+              <select
+                className="modal-input"
+                value={privateDomain}
+                onChange={e => setPrivateDomain(e.target.value)}
+              >
+                {siteOptions.map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="account-checklist-empty">
+                No open sites. Open a website (a tab) first, then create a private category.
+              </div>
+            )}
+            <div className="sidebar-empty-hint">
+              This category will only appear in the vault sidebar when you are on{' '}
+              {privateDomain ? <code>{privateDomain}</code> : 'the selected site'}.
+            </div>
+          </div>
+        )}
 
         {/* Icon */}
         <div className="modal-field">
