@@ -2,7 +2,7 @@
 // Tab Strip Component
 // ============================================================================
 
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TabInfo } from '../../shared/types';
 
 interface TabStripProps {
@@ -11,6 +11,15 @@ interface TabStripProps {
   onSwitchTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onNewTab: () => void;
+  onDuplicateTab?: (tabId: string) => void;
+  onCloseOtherTabs?: (tabId: string) => void;
+  onReloadTab?: (tabId: string) => void;
+}
+
+interface TabMenuState {
+  tabId: string;
+  x: number;
+  y: number;
 }
 
 export default function TabStrip({
@@ -19,7 +28,12 @@ export default function TabStrip({
   onSwitchTab,
   onCloseTab,
   onNewTab,
+  onDuplicateTab,
+  onCloseOtherTabs,
+  onReloadTab,
 }: TabStripProps) {
+  const [menu, setMenu] = useState<TabMenuState | null>(null);
+
   const handleMiddleClick = (e: React.MouseEvent, tabId: string) => {
     if (e.button === 1) {
       e.preventDefault();
@@ -27,16 +41,41 @@ export default function TabStrip({
     }
   };
 
+  const openMenu = (e: React.MouseEvent, tabId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ tabId, x: e.clientX, y: e.clientY });
+  };
+
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  // Dismiss the context menu on any outside click, scroll, or Escape.
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeMenu(); };
+    window.addEventListener('click', closeMenu);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('click', closeMenu);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menu, closeMenu]);
+
+  const menuTab = menu ? tabs.find(t => t.id === menu.tabId) : null;
+  const hasPage = !!(menuTab && menuTab.currentUrl && menuTab.currentUrl !== 'about:blank');
+
   return (
     <div className="tab-strip">
       {tabs.map(tab => {
         const isActive = tab.id === activeTabId;
-        const hasPage = tab.currentUrl && tab.currentUrl !== 'about:blank';
+        const hasTabPage = tab.currentUrl && tab.currentUrl !== 'about:blank';
         // Prefer the live page title; fall back to the site host from the URL;
         // only show "New Tab" when nothing has been loaded yet.
         const displayTitle = tab.title && tab.title.trim()
           ? tab.title.trim()
-          : hasPage
+          : hasTabPage
             ? truncateUrl(tab.currentUrl)
             : 'New Tab';
         const maxTitleLength = 25;
@@ -47,6 +86,7 @@ export default function TabStrip({
             className={`tab-item${isActive ? ' active' : ''}`}
             onClick={() => onSwitchTab(tab.id)}
             onMouseDown={(e) => handleMiddleClick(e, tab.id)}
+            onContextMenu={(e) => openMenu(e, tab.id)}
             draggable={false}
           >
             <span className={`tab-type-badge${tab.type === 'login_entry' ? ' login' : ''}`}>
@@ -87,6 +127,52 @@ export default function TabStrip({
       >
         +
       </button>
+
+      {/* Right-click context menu for a tab */}
+      {menu && menuTab && (
+        <div
+          className="tab-context-menu"
+          style={{ left: menu.x, top: menu.y }}
+          onClick={(e) => e.stopPropagation()}
+          role="menu"
+        >
+          <button
+            className="tab-context-item"
+            onClick={() => { onReloadTab?.(menu.tabId); closeMenu(); }}
+            disabled={!hasPage || !onReloadTab}
+          >
+            Reload
+          </button>
+          <button
+            className="tab-context-item"
+            onClick={() => { onDuplicateTab?.(menu.tabId); closeMenu(); }}
+            disabled={!hasPage || !onDuplicateTab}
+          >
+            Duplicate Tab
+          </button>
+          <div className="tab-context-sep" />
+          <button
+            className="tab-context-item"
+            onClick={() => { onNewTab(); closeMenu(); }}
+          >
+            New Tab
+          </button>
+          <div className="tab-context-sep" />
+          <button
+            className="tab-context-item"
+            onClick={() => { onCloseTab(menu.tabId); closeMenu(); }}
+          >
+            Close Tab
+          </button>
+          <button
+            className="tab-context-item"
+            onClick={() => { onCloseOtherTabs?.(menu.tabId); closeMenu(); }}
+            disabled={tabs.length <= 1 || !onCloseOtherTabs}
+          >
+            Close Other Tabs
+          </button>
+        </div>
+      )}
     </div>
   );
 }

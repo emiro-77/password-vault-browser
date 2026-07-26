@@ -2,18 +2,34 @@
 // Bookmarks Bar Component
 // ============================================================================
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Bookmark } from '../../shared/types';
 
 interface BookmarksBarProps {
   bookmarks: Bookmark[];
   onNavigate: (url: string) => void;
   onRemove: (bookmark: Bookmark) => void;
+  /**
+   * Fired when a folder dropdown opens (true) / closes (false). The parent
+   * detaches the native web view while true so the dropdown — which overlaps
+   * the page area — renders on top instead of behind the BrowserView.
+   */
+  onOverlayChange?: (active: boolean) => void;
 }
 
-export default function BookmarksBar({ bookmarks, onNavigate, onRemove }: BookmarksBarProps) {
+export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOverlayChange }: BookmarksBarProps) {
   // Which folder dropdown is currently open (by folder name).
   const [openFolder, setOpenFolder] = useState<string | null>(null);
+
+  const toggleFolder = (name: string) => {
+    setOpenFolder(prev => (prev === name ? null : name));
+  };
+
+  // Detach/reattach the web view whenever a dropdown is open/closed so the menu
+  // is visible above the page.
+  useEffect(() => {
+    onOverlayChange?.(openFolder !== null);
+  }, [openFolder, onOverlayChange]);
 
   // Split bookmarks into top-level (no folder) and grouped-by-folder buckets.
   const { topLevel, folders } = useMemo(() => {
@@ -48,7 +64,7 @@ export default function BookmarksBar({ bookmarks, onNavigate, onRemove }: Bookma
     <div key={bm.id} className="bookmark-item-wrap">
       <button
         className="bookmark-item"
-        onClick={() => onNavigate(bm.url)}
+        onClick={() => { setOpenFolder(null); onNavigate(bm.url); }}
         title={bm.url}
       >
         <span className="truncate" style={{ maxWidth: 160 }}>
@@ -71,12 +87,21 @@ export default function BookmarksBar({ bookmarks, onNavigate, onRemove }: Bookma
 
   return (
     <div className="bookmarks-bar">
+      {/* Click-away backdrop: closing the folder reattaches the web view. */}
+      {openFolder !== null && (
+        <div
+          className="bookmark-folder-backdrop"
+          onClick={() => setOpenFolder(null)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Folder dropdowns first */}
       {folders.map(folder => (
         <div key={folder.name} className="bookmark-folder">
           <button
             className="bookmark-folder-btn"
-            onClick={() => setOpenFolder(openFolder === folder.name ? null : folder.name)}
+            onClick={() => toggleFolder(folder.name)}
             title={folder.name}
           >
             <span className="bookmark-folder-icon">📁</span>

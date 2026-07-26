@@ -717,6 +717,33 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   filters by site name or account email/label (matching a site keeps all its
   accounts; matching only accounts narrows the group; search forces groups
   open). (v1.2.0)
+- ✅ **Bookmark-folder dropdown z-order, app icon, full-screen Settings &
+  right-click context menus (v1.2.1)**: four fixes.
+  (1) *Bookmark folder dropdown now shows on top* — the folder menu was drawn
+  behind the native `BrowserView` (clicking a folder only flipped the caret and
+  showed nothing). Opening a folder now calls `tabs.setOverlay(true)` to detach
+  the web view (via a new `onOverlayChange` callback from `BookmarksBar`),
+  raises the menu/backdrop z-index, and adds a click-away backdrop + close on
+  bookmark click.
+  (2) *Application icon* — a multi-resolution `build/icon.ico` (16–256px) is
+  generated from `resources/icon.png` and wired into electron-builder
+  (`win.icon`, top-level `icon`, NSIS installer/uninstaller/header icons) so the
+  portable and installable `.exe` carry the app icon; `resources/icon.png` is
+  also copied into `dist/` and set as the runtime `BrowserWindow` icon via
+  `resolveWindowIcon()`.
+  (3) *Settings is now full-screen* — the Settings panel renders in a
+  `position:fixed; inset:0` overlay at the app root (above the sidebar, bookmark
+  bar, tab strip and URL input) with the web view detached, instead of inside
+  the browser content area.
+  (4) *Right-click context menus* — the web page now has a native Electron
+  context menu (Open Link in New Tab / Open Link / Copy Link Address / Open in
+  Browser; image Open/Copy/Copy-address; Cut/Copy/Paste/Select-All in editable
+  fields driven by `editFlags`; Copy + Search Web on a text selection;
+  Back/Forward/Reload; Copy Page URL; Inspect Element at the cursor). Tabs have
+  an HTML right-click menu (Reload / Duplicate Tab / New Tab / Close Tab / Close
+  Other Tabs). "Open Link in New Tab" creates a guest tab in the main process
+  and broadcasts `EVENT_TAB_CREATED`, which the renderer now listens for to add
+  and activate the tab. (v1.2.1)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

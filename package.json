@@ -1,6 +1,6 @@
 {
   "name": "vault-browser-desktop",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Privacy-focused multi-session browser with isolated tabs and global credential management",
   "main": "dist/main/index.js",
   "type": "commonjs",
@@ -22,8 +22,10 @@
     "appId": "com.passwordvault.browser",
     "productName": "Vault Browser Desktop",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
+    "icon": "build/icon.ico",
     "files": [
       "dist/**/*",
       "package.json"
@@ -45,14 +47,17 @@
           "arch": ["x64"]
         }
       ],
-      "icon": null
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "installerSidebar": null,
       "createDesktopShortcut": true,
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
     },
     "extraMetadata": {
       "main": "dist/main/index.js"

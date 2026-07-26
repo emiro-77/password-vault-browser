@@ -2,7 +2,7 @@
 // Tabs IPC Handlers
 // ============================================================================
 
-import { ipcMain, BrowserWindow, BrowserView, session as electronSession } from 'electron';
+import { ipcMain, BrowserWindow, BrowserView, Menu, MenuItemConstructorOptions, clipboard, shell, session as electronSession } from 'electron';
 import { IPC_CHANNELS, IpcResponse, PageInfo } from '../../shared/types';
 import { tabManager } from '../services/tab-manager';
 import { autofillEngine } from '../services/autofill-engine';
@@ -11,7 +11,7 @@ import { loginEntryManager } from '../services/login-entry-manager';
 import { loginPageManager } from '../services/login-page-manager';
 import { normalizeUrlOrSearch } from '../services/domain-utils';
 import { extractHostname, extractDomain } from '../services/domain-utils';
-import { canGoBack, canGoForward } from '../services/webcontents-utils';
+import { canGoBack, canGoForward, goBack as wcGoBack, goForward as wcGoForward } from '../services/webcontents-utils';
 import {
   describeNetError,
   mapHttpStatus,
@@ -381,6 +381,117 @@ function setupViewEvents(tabId: string, view: BrowserView): void {
 
   // Drop the per-tab persisted-URL cache when the view goes away.
   wc.on('destroyed', () => { lastPersistedUrl.delete(tabId); });
+
+  // ---- Native right-click context menu (Issue 4) ----
+  // A BrowserView has no default context menu, so we build one from the
+  // Chromium `params` describing what the user right-clicked (link, image,
+  // selection, editable field, or plain page) and pop it up at the cursor.
+  wc.on('context-menu', (_event, params) => {
+    if (wc.isDestroyed()) return;
+
+    const items: MenuItemConstructorOptions[] = [];
+    const sep = () => { if (items.length && items[items.length - 1].type !== 'separator') items.push({ type: 'separator' }); };
+
+    // --- Link actions ---
+    if (params.linkURL) {
+      items.push({
+        label: 'Open Link in New Tab',
+        click: () => { openUrlInNewTab(params.linkURL); },
+      });
+      items.push({
+        label: 'Open Link',
+        click: () => { if (!wc.isDestroyed()) wc.loadURL(params.linkURL); },
+      });
+      items.push({
+        label: 'Copy Link Address',
+        click: () => { clipboard.writeText(params.linkURL); },
+      });
+      items.push({
+        label: 'Open Link in Browser',
+        click: () => { shell.openExternal(params.linkURL).catch(() => { /* ignore */ }); },
+      });
+      sep();
+    }
+
+    // --- Image actions ---
+    if (params.mediaType === 'image' && params.srcURL) {
+      items.push({
+        label: 'Open Image in New Tab',
+        click: () => { openUrlInNewTab(params.srcURL); },
+      });
+      items.push({
+        label: 'Copy Image',
+        click: () => { if (!wc.isDestroyed()) wc.copyImageAt(params.x, params.y); },
+      });
+      items.push({
+        label: 'Copy Image Address',
+        click: () => { clipboard.writeText(params.srcURL); },
+      });
+      sep();
+    }
+
+    // --- Editable field actions ---
+    if (params.isEditable) {
+      const f = params.editFlags;
+      items.push({ label: 'Cut', enabled: f.canCut, role: 'cut' });
+      items.push({ label: 'Copy', enabled: f.canCopy, role: 'copy' });
+      items.push({ label: 'Paste', enabled: f.canPaste, role: 'paste' });
+      items.push({ label: 'Select All', enabled: f.canSelectAll, role: 'selectAll' });
+      sep();
+    } else if (params.selectionText && params.selectionText.trim()) {
+      // --- Selected (non-editable) text ---
+      items.push({ label: 'Copy', role: 'copy' });
+      const q = encodeURIComponent(params.selectionText.trim().slice(0, 200));
+      items.push({
+        label: 'Search Web for Selection',
+        click: () => { openUrlInNewTab(`https://www.google.com/search?q=${q}`); },
+      });
+      sep();
+    }
+
+    // --- Navigation + page actions (always available) ---
+    items.push({ label: 'Back', enabled: canGoBack(wc), click: () => { if (!wc.isDestroyed()) wcGoBack(wc); } });
+    items.push({ label: 'Forward', enabled: canGoForward(wc), click: () => { if (!wc.isDestroyed()) wcGoForward(wc); } });
+    items.push({ label: 'Reload', click: () => { if (!wc.isDestroyed()) wc.reload(); } });
+    sep();
+    items.push({
+      label: 'Copy Page URL',
+      click: () => { if (!wc.isDestroyed()) clipboard.writeText(wc.getURL()); },
+    });
+    items.push({
+      label: 'Inspect Element',
+      click: () => { if (!wc.isDestroyed()) wc.inspectElement(params.x, params.y); },
+    });
+
+    const menu = Menu.buildFromTemplate(items);
+    const win = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
+    menu.popup(win ? { window: win } : undefined);
+  });
+}
+
+/**
+ * Open a URL in a brand-new guest tab, switch to it, and tell the renderer to
+ * add it to the tab strip. Used by the webpage context menu ("Open Link in New
+ * Tab", "Open Image in New Tab", "Search Web for Selection").
+ */
+async function openUrlInNewTab(url: string): Promise<void> {
+  if (!url) return;
+  try {
+    const normalizedUrl = normalizeUrlOrSearch(url);
+    const tabInfo = await tabManager.createGuestTab();
+    const view = createViewForTab(tabInfo.id, tabInfo.partitionId);
+    tabManager.setView(tabInfo.id, view);
+    setupViewEvents(tabInfo.id, view);
+    view.webContents.loadURL(normalizedUrl);
+
+    // Reflect the destination URL immediately so the tab strip does not flash
+    // "New Tab" before the first navigation event arrives.
+    const created = { ...tabInfo, currentUrl: normalizedUrl, domain: extractDomain(normalizedUrl) };
+    broadcast(IPC_CHANNELS.EVENT_TAB_CREATED, created);
+    await tabManager.switchToTab(tabInfo.id);
+  } catch (err) {
+    console.error('[Tabs] openUrlInNewTab failed:', err);
+  }
 }
 
 // Remember the last URL persisted per tab so repeated events for the same URL

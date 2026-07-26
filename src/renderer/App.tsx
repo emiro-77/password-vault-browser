@@ -501,6 +501,51 @@ export default function App() {
     }
   }, [tabs, api, reloadStatusesForUrl, loadDomainStatuses]);
 
+  // ---- Tab context-menu actions (Issue 4) ----
+
+  // Duplicate a tab: open its current URL in a fresh guest tab and activate it.
+  const handleDuplicateTab = useCallback(async (tabId: string) => {
+    const tab = tabs.find(t => t.id === tabId);
+    const url = tab?.currentUrl;
+    if (!url || url === 'about:blank') return;
+    const res = await api.tabs.createGuest();
+    if (res.success && res.data) {
+      const newTab = res.data;
+      setTabs(prev => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+      setCurrentTitle('Loading...');
+      await api.tabs.switch(newTab.id);
+      await api.tabs.navigate(url);
+      setCurrentUrl(url);
+      setCurrentDomain(domainFromUrl(url));
+    }
+  }, [tabs, api]);
+
+  // Close every tab except the given one.
+  const handleCloseOtherTabs = useCallback(async (keepTabId: string) => {
+    const others = tabs.filter(t => t.id !== keepTabId);
+    for (const t of others) {
+      await api.tabs.close(t.id);
+    }
+    const kept = tabs.find(t => t.id === keepTabId);
+    setTabs(kept ? [kept] : []);
+    if (activeTabId !== keepTabId && kept) {
+      setActiveTabId(kept.id);
+      setCurrentUrl(kept.currentUrl);
+      setCurrentDomain(kept.domain);
+      setCurrentTitle(kept.type === 'guest' ? 'New Tab' : 'Loading...');
+      await api.tabs.switch(kept.id);
+    }
+  }, [tabs, api, activeTabId]);
+
+  // Reload a tab: make it active (if not already) then refresh it.
+  const handleReloadTab = useCallback(async (tabId: string) => {
+    if (activeTabId !== tabId) {
+      await handleSwitchTab(tabId);
+    }
+    await api.tabs.refresh();
+  }, [activeTabId, api, handleSwitchTab]);
+
   const handleNavigate = useCallback(async (input: string) => {
     // Normalize raw address-bar input: bare domains get https://, and
     // free text becomes a search query.
@@ -555,6 +600,17 @@ export default function App() {
       }
     });
 
+    // A new tab was created by the main process (e.g. "Open Link in New Tab"
+    // from the webpage right-click menu). Add it to the strip and activate it.
+    const unsubCreated = api.on('event:tab-created', (data: any) => {
+      if (!data || !data.id) return;
+      setTabs(prev => (prev.some(t => t.id === data.id) ? prev : [...prev, data]));
+      setActiveTabId(data.id);
+      setCurrentUrl(data.currentUrl || 'about:blank');
+      setCurrentDomain(data.domain ?? null);
+      setCurrentTitle('Loading...');
+    });
+
     const unsub2 = api.on('event:page-title-changed', (data: any) => {
       // Store the live page title on the tab so the tab strip label reflects
       // the actual site name (e.g. "Claude"), for the active or background tab.
@@ -603,6 +659,7 @@ export default function App() {
 
     return () => {
       unsub1();
+      unsubCreated();
       unsub2();
       unsub3();
       unsub4();
@@ -892,6 +949,7 @@ export default function App() {
           bookmarks={bookmarks}
           onNavigate={handleNavigate}
           onRemove={handleRemoveBookmark}
+          onOverlayChange={(active) => api.tabs.setOverlay(active)}
         />
 
         {/* Tab strip */}
@@ -901,6 +959,9 @@ export default function App() {
           onSwitchTab={handleSwitchTab}
           onCloseTab={handleCloseTab}
           onNewTab={handleNewGuestTab}
+          onDuplicateTab={handleDuplicateTab}
+          onCloseOtherTabs={handleCloseOtherTabs}
+          onReloadTab={handleReloadTab}
         />
       </div>
 
@@ -933,13 +994,17 @@ export default function App() {
               </button>
             </div>
           )}
-
-          {/* Settings tab — fills the browser area (view detached via overlay) */}
-          {settingsOpen && (
-            <SettingsPanel onClose={handleCloseSettings} />
-          )}
         </div>
       </div>
+
+      {/* Settings — a full-screen overlay ABOVE all chrome (address bar,
+          bookmarks bar, tab strip and sidebar), so it takes over the whole
+          window. The native web view is already detached via setOverlay. */}
+      {settingsOpen && (
+        <div className="settings-fullscreen">
+          <SettingsPanel onClose={handleCloseSettings} />
+        </div>
+      )}
 
       {/* Add Login Entry Modal */}
       {showAddEntryModal && (

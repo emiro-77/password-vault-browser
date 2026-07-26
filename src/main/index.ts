@@ -12,6 +12,7 @@
 
 import { app, BrowserWindow, screen, ipcMain, nativeTheme, dialog } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import { initDatabase, closeDatabase } from './db';
 import { initCredentialStore } from './services/credential-store';
 import { registerAllIpcHandlers } from './ipc';
@@ -43,6 +44,21 @@ app.commandLine.appendSwitch('disk-cache-size', String(256 * 1024 * 1024)); // 2
 /**
  * Create the main application window.
  */
+/**
+ * Resolve the runtime window/taskbar icon. Packaged builds have it at
+ * dist/icon.png (bundled by copy-assets); dev falls back to resources/icon.png.
+ */
+function resolveWindowIcon(): string | undefined {
+  const candidates = [
+    path.join(__dirname, '../icon.png'),          // dist/icon.png (packaged)
+    path.join(__dirname, '../../resources/icon.png'), // dev source
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch { /* ignore */ }
+  }
+  return undefined;
+}
+
 function createMainWindow(): void {
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
 
@@ -52,7 +68,7 @@ function createMainWindow(): void {
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     title: APP_NAME,
-    icon: path.join(__dirname, '../../resources/icon.png'),
+    icon: resolveWindowIcon(),
     backgroundColor: '#1e1e2e',
     show: false,
     webPreferences: {

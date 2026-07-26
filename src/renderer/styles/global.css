@@ -438,6 +438,8 @@ html, body {
   position: relative;
   display: flex;
   align-items: center;
+  /* Lift the folder (and its dropdown) above the click-away backdrop (900). */
+  z-index: 1000;
 }
 
 .bookmark-folder-btn {
@@ -467,11 +469,21 @@ html, body {
   opacity: 0.7;
 }
 
+/* Click-away backdrop behind an open folder dropdown. Covers the whole window
+   so a click anywhere (over the now-detached web-view area) closes the menu. */
+.bookmark-folder-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: transparent;
+}
+
 .bookmark-folder-menu {
   position: absolute;
   top: calc(100% + 2px);
   left: 0;
-  z-index: 50;
+  /* Above the backdrop (900) so the menu itself stays clickable. */
+  z-index: 950;
   display: flex;
   flex-direction: column;
   min-width: 180px;
@@ -587,6 +599,49 @@ html, body {
 .tab-close-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+/* ---- Tab right-click context menu (Issue 4) ---- */
+
+.tab-context-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 170px;
+  padding: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-context-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.tab-context-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.tab-context-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tab-context-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
 }
 
 /* ---- Sidebar ---- */
@@ -1545,13 +1600,22 @@ html, body {
 
 /* The settings panel fills the shell below the chrome, above the browser view
    (the browser view is detached while settings are open). */
+/* Full-screen wrapper: Settings takes over the ENTIRE window, hiding the
+   address bar, bookmarks bar, tab strip and sidebar. */
+.settings-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--bg-primary);
+}
+
 .settings-panel {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 900;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);

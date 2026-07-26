@@ -39,4 +39,15 @@ for (const logo of logos) {
   }
 }
 
+// Runtime window/taskbar icon. Only dist/** is bundled into the asar, so copy
+// the app icon into dist/ where the packaged main process can reach it.
+const iconFrom = path.join(root, 'resources', 'icon.png');
+const distRoot = path.join(root, 'dist');
+if (fs.existsSync(iconFrom)) {
+  fs.mkdirSync(distRoot, { recursive: true });
+  fs.copyFileSync(iconFrom, path.join(distRoot, 'icon.png'));
+} else {
+  console.warn(`[copy-assets] WARNING: missing app icon ${iconFrom}`);
+}
+
 console.log('[copy-assets] renderer assets copied to dist/renderer/');
