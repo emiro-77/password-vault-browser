@@ -57,6 +57,9 @@ const IPC_CHANNELS = {
   // Overlay control
   VIEW_SET_OVERLAY:       'view:set-overlay',
 
+  // Native bookmark-folder dropdown
+  BOOKMARK_SHOW_FOLDER_MENU: 'bookmark:show-folder-menu',
+
   // Autofill
   AUTOFILL:               'autofill:execute',
 
@@ -107,6 +110,7 @@ const api = {
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_DELETE, id),
     reorder: (orderedIds: string[]) => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_REORDER, orderedIds),
     folders: () => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_FOLDERS),
+    showFolderMenu: (payload: any) => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARK_SHOW_FOLDER_MENU, payload),
   },
 
   // ---- Categories / folders ----

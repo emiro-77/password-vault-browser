@@ -18,6 +18,11 @@ export interface PvbAPI {
     folders: () => Promise<IpcResponse<string[]>>;
     delete: (id: string) => Promise<IpcResponse>;
     reorder: (orderedIds: string[]) => Promise<IpcResponse>;
+    showFolderMenu: (payload: {
+      items: Array<{ title: string; url: string }>;
+      x?: number;
+      y?: number;
+    }) => Promise<IpcResponse>;
   };
 
   categories: {

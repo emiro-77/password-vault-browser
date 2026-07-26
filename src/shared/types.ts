@@ -317,6 +317,10 @@ export const IPC_CHANNELS = {
   // Overlay control — hide the web view so shell modals are interactive
   VIEW_SET_OVERLAY:       'view:set-overlay',
 
+  // Native bookmark-folder dropdown (rendered by the main process as an
+  // Electron Menu so it draws ABOVE the native web view without detaching it).
+  BOOKMARK_SHOW_FOLDER_MENU: 'bookmark:show-folder-menu',
+
   // Autofill
   AUTOFILL:               'autofill:execute',
 

@@ -2,7 +2,7 @@
 // Bookmarks Bar Component
 // ============================================================================
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { Bookmark } from '../../shared/types';
 
 interface BookmarksBarProps {
@@ -10,27 +10,14 @@ interface BookmarksBarProps {
   onNavigate: (url: string) => void;
   onRemove: (bookmark: Bookmark) => void;
   /**
-   * Fired when a folder dropdown opens (true) / closes (false). The parent
-   * detaches the native web view while true so the dropdown — which overlaps
-   * the page area — renders on top instead of behind the BrowserView.
+   * Open a folder's contents. The parent shows them as a NATIVE dropdown menu
+   * (an Electron Menu popped up by the main process) which always renders above
+   * the web view — so no BrowserView detach, no page flash / reload.
    */
-  onOverlayChange?: (active: boolean) => void;
+  onOpenFolder?: (items: Bookmark[], anchor: { x: number; y: number }) => void;
 }
 
-export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOverlayChange }: BookmarksBarProps) {
-  // Which folder dropdown is currently open (by folder name).
-  const [openFolder, setOpenFolder] = useState<string | null>(null);
-
-  const toggleFolder = (name: string) => {
-    setOpenFolder(prev => (prev === name ? null : name));
-  };
-
-  // Detach/reattach the web view whenever a dropdown is open/closed so the menu
-  // is visible above the page.
-  useEffect(() => {
-    onOverlayChange?.(openFolder !== null);
-  }, [openFolder, onOverlayChange]);
-
+export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOpenFolder }: BookmarksBarProps) {
   // Split bookmarks into top-level (no folder) and grouped-by-folder buckets.
   const { topLevel, folders } = useMemo(() => {
     const top: Bookmark[] = [];
@@ -60,11 +47,17 @@ export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOverla
     );
   }
 
+  // Pop the native folder menu just below the clicked folder button.
+  const handleFolderClick = (e: React.MouseEvent, items: Bookmark[]) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    onOpenFolder?.(items, { x: Math.round(rect.left), y: Math.round(rect.bottom) });
+  };
+
   const renderBookmark = (bm: Bookmark) => (
     <div key={bm.id} className="bookmark-item-wrap">
       <button
         className="bookmark-item"
-        onClick={() => { setOpenFolder(null); onNavigate(bm.url); }}
+        onClick={() => onNavigate(bm.url)}
         title={bm.url}
       >
         <span className="truncate" style={{ maxWidth: 160 }}>
@@ -87,32 +80,18 @@ export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOverla
 
   return (
     <div className="bookmarks-bar">
-      {/* Click-away backdrop: closing the folder reattaches the web view. */}
-      {openFolder !== null && (
-        <div
-          className="bookmark-folder-backdrop"
-          onClick={() => setOpenFolder(null)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Folder dropdowns first */}
+      {/* Folder dropdowns first — opened as native menus */}
       {folders.map(folder => (
         <div key={folder.name} className="bookmark-folder">
           <button
             className="bookmark-folder-btn"
-            onClick={() => toggleFolder(folder.name)}
+            onClick={(e) => handleFolderClick(e, folder.items)}
             title={folder.name}
           >
             <span className="bookmark-folder-icon">📁</span>
             <span className="truncate" style={{ maxWidth: 120 }}>{folder.name}</span>
-            <span className="bookmark-folder-caret">{openFolder === folder.name ? '▴' : '▾'}</span>
+            <span className="bookmark-folder-caret">▾</span>
           </button>
-          {openFolder === folder.name && (
-            <div className="bookmark-folder-menu">
-              {folder.items.map(renderBookmark)}
-            </div>
-          )}
         </div>
       ))}
 

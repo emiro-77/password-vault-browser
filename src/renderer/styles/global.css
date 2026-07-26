@@ -438,8 +438,6 @@ html, body {
   position: relative;
   display: flex;
   align-items: center;
-  /* Lift the folder (and its dropdown) above the click-away backdrop (900). */
-  z-index: 1000;
 }
 
 .bookmark-folder-btn {
@@ -469,38 +467,9 @@ html, body {
   opacity: 0.7;
 }
 
-/* Click-away backdrop behind an open folder dropdown. Covers the whole window
-   so a click anywhere (over the now-detached web-view area) closes the menu. */
-.bookmark-folder-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 900;
-  background: transparent;
-}
-
-.bookmark-folder-menu {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  /* Above the backdrop (900) so the menu itself stays clickable. */
-  z-index: 950;
-  display: flex;
-  flex-direction: column;
-  min-width: 180px;
-  padding: 4px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-}
-
-.bookmark-folder-menu .bookmark-item-wrap {
-  width: 100%;
-}
-
-.bookmark-folder-menu .bookmark-item {
-  flex: 1;
-}
+/* Folder contents now open as a NATIVE Electron dropdown menu (rendered by the
+   main process), which always draws above the web view — so the old HTML
+   dropdown + click-away backdrop are no longer needed. */
 
 /* Save-bookmark modal placement confirmation hint (#3.2) */
 .bookmark-placement-hint {

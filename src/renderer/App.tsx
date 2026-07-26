@@ -949,7 +949,13 @@ export default function App() {
           bookmarks={bookmarks}
           onNavigate={handleNavigate}
           onRemove={handleRemoveBookmark}
-          onOverlayChange={(active) => api.tabs.setOverlay(active)}
+          onOpenFolder={(items, anchor) =>
+            api.bookmarks.showFolderMenu({
+              items: items.map(b => ({ title: b.title, url: b.url })),
+              x: anchor.x,
+              y: anchor.y,
+            })
+          }
         />
 
         {/* Tab strip */}

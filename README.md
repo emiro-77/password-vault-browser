@@ -719,12 +719,10 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   open). (v1.2.0)
 - ✅ **Bookmark-folder dropdown z-order, app icon, full-screen Settings &
   right-click context menus (v1.2.1)**: four fixes.
-  (1) *Bookmark folder dropdown now shows on top* — the folder menu was drawn
-  behind the native `BrowserView` (clicking a folder only flipped the caret and
-  showed nothing). Opening a folder now calls `tabs.setOverlay(true)` to detach
-  the web view (via a new `onOverlayChange` callback from `BookmarksBar`),
-  raises the menu/backdrop z-index, and adds a click-away backdrop + close on
-  bookmark click.
+  (1) *Bookmark folder dropdown* — first attempt: detach the web view via
+  `tabs.setOverlay(true)` while a folder was open so the HTML dropdown showed on
+  top. **This was superseded in v1.2.2** because toggling the BrowserView on
+  every folder open/close made the page visibly flash/reload; see v1.2.2 below.
   (2) *Application icon* — a multi-resolution `build/icon.ico` (16–256px) is
   generated from `resources/icon.png` and wired into electron-builder
   (`win.icon`, top-level `icon`, NSIS installer/uninstaller/header icons) so the
@@ -744,6 +742,17 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   Other Tabs). "Open Link in New Tab" creates a guest tab in the main process
   and broadcasts `EVENT_TAB_CREATED`, which the renderer now listens for to add
   and activate the tab. (v1.2.1)
+- ✅ **Bookmark folder dropdown rebuilt as a native menu — no page flash
+  (v1.2.2)**: the v1.2.1 approach detached/reattached the `BrowserView` on every
+  folder open/close, which made the web page visibly reload/flash and could hide
+  the Save-bookmark modal (a stray reattach drew the page back over it). The
+  folder dropdown is now a **native Electron `Menu`** popped up by the main
+  process (new `bookmark:show-folder-menu` IPC + `bookmarks.showFolderMenu`
+  API). A native menu always renders above the web view, so it needs **no
+  BrowserView detach** — the page no longer flashes/reloads, and the
+  Save-bookmark modal's own `setOverlay` is no longer raced. Each folder entry
+  offers Open / Open in New Tab / Copy Address; the old HTML dropdown, click-away
+  backdrop and their CSS/`onOverlayChange` wiring were removed. (v1.2.2)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

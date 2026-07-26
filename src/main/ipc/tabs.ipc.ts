@@ -214,6 +214,48 @@ export function registerTabsIpc(): void {
       return { success: false, error: err.message };
     }
   });
+
+  // Show a bookmark folder's contents as a NATIVE dropdown menu. A native
+  // Electron menu always renders above the web view, so — unlike an HTML
+  // dropdown — it needs no BrowserView detach (no page flash / reload).
+  // Left-click navigates the active tab; the menu also offers open-in-new-tab.
+  ipcMain.handle(IPC_CHANNELS.BOOKMARK_SHOW_FOLDER_MENU, async (
+    _event,
+    payload: { items: Array<{ title: string; url: string }>; x?: number; y?: number }
+  ): Promise<IpcResponse> => {
+    try {
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      const template: MenuItemConstructorOptions[] = [];
+
+      if (items.length === 0) {
+        template.push({ label: '(empty)', enabled: false });
+      } else {
+        for (const bm of items) {
+          const url = bm.url;
+          const label = (bm.title && bm.title.trim()) ? bm.title.trim() : url;
+          template.push({
+            label: label.length > 60 ? label.slice(0, 59) + '…' : label,
+            submenu: [
+              { label: 'Open', click: () => { tabManager.navigateActiveTab(normalizeUrlOrSearch(url)); } },
+              { label: 'Open in New Tab', click: () => { openUrlInNewTab(url); } },
+              { label: 'Copy Address', click: () => { clipboard.writeText(url); } },
+            ],
+            // A plain left-click on the label opens it in the current tab.
+            click: () => { tabManager.navigateActiveTab(normalizeUrlOrSearch(url)); },
+          });
+        }
+      }
+
+      const menu = Menu.buildFromTemplate(template);
+      const win = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
+      const x = typeof payload?.x === 'number' ? Math.round(payload.x) : undefined;
+      const y = typeof payload?.y === 'number' ? Math.round(payload.y) : undefined;
+      menu.popup(win ? { window: win, x, y } : { x, y });
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
 }
 
 // ---- Helper functions ----

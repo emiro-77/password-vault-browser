@@ -75,6 +75,7 @@ function createMockApi(): PvbAPI & { __isMock: true } {
       folders: () => ok(Array.from(new Set(MOCK_BOOKMARKS.map(b => b.folder).filter(f => f !== ''))).sort()),
       delete: () => ok(undefined),
       reorder: () => ok(undefined),
+      showFolderMenu: () => ok(undefined),
     },
 
     categories: {
