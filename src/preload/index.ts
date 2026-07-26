@@ -29,6 +29,7 @@ const IPC_CHANNELS = {
   BOOKMARKS_CREATE:       'bookmarks:create',
   BOOKMARKS_DELETE:       'bookmarks:delete',
   BOOKMARKS_REORDER:      'bookmarks:reorder',
+  BOOKMARKS_FOLDERS:      'bookmarks:folders',
 
   // Categories / folders
   CATEGORIES_LIST:        'categories:list',
@@ -105,6 +106,7 @@ const api = {
     create: (data: any) => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_CREATE, data),
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_DELETE, id),
     reorder: (orderedIds: string[]) => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_REORDER, orderedIds),
+    folders: () => ipcRenderer.invoke(IPC_CHANNELS.BOOKMARKS_FOLDERS),
   },
 
   // ---- Categories / folders ----

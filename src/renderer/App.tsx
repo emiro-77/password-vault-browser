@@ -10,6 +10,7 @@ import TabStrip from './components/TabStrip';
 import CategoryModal from './components/CategoryModal';
 import SettingsPanel from './components/SettingsPanel';
 import SaveLoginPageModal from './components/SaveLoginPageModal';
+import SaveBookmarkModal, { BookmarkDraft } from './components/SaveBookmarkModal';
 import { Theme } from './components/ThemeToggle';
 import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus, Category, LoginConnection } from '../shared/types';
 import { WebviewTag } from './types.d';
@@ -61,6 +62,10 @@ export default function App() {
   const [loginEntries, setLoginEntries] = useState<LoginEntry[]>([]);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [domainStatuses, setDomainStatuses] = useState<EntryWithStatus[]>([]);
+
+  // Bug 3: Save-bookmark modal state. When open, holds the existing folder
+  // names so the user can place the bookmark; null = modal closed.
+  const [bookmarkModalFolders, setBookmarkModalFolders] = useState<string[] | null>(null);
 
   const [showAddEntryModal, setShowAddEntryModal] = useState(false);
 
@@ -149,15 +154,10 @@ export default function App() {
   }, [sidebarCollapsed, api]);
 
   // ---- Data loading ----
-
-  const loadLoginEntries = useCallback(async (domain?: string | null) => {
-    // Per-site accounts: when a domain is active, only that site's accounts
-    // (plus legacy unscoped ones) are listed.
-    const res = await api.credentials.list(domain || undefined);
-    if (res.success && res.data) {
-      setLoginEntries(res.data);
-    }
-  }, [api]);
+  // Note: the sidebar's account list is loaded together with its statuses by
+  // loadDomainStatuses() (keyed on the canonical account domain), so there is
+  // no separate loadLoginEntries — that split was what let entries & statuses
+  // drift out of sync and blank the sidebar.
 
   const loadBookmarks = useCallback(async () => {
     const res = await api.bookmarks.list();
@@ -177,47 +177,46 @@ export default function App() {
     }
   }, [api]);
 
+  // Load the sidebar entries AND their per-site statuses for a domain, keeping
+  // the two in lock-step. This fetches the account list for the domain ITSELF
+  // (instead of merging over the `loginEntries` state closure), so there is no
+  // window where statuses are merged against a stale/empty entry list — the
+  // race that could blank the sidebar when returning from an unrelated tab.
+  //
+  // It also updates `loginEntries` so every consumer (autofill, categories)
+  // sees the same domain-scoped list. Callers pass the CANONICAL account
+  // domain (see reloadStatusesForUrl / accountDomain).
   const loadDomainStatuses = useCallback(async (domain: string | null) => {
-    if (!domain) {
-      // Load all statuses for global sidebar context
-      const res = await api.status.getAll();
-      if (res.success && res.data) {
-        const merged: EntryWithStatus[] = loginEntries.map(entry => {
-          const match = res.data!.find(s => s.loginEntryId === entry.id);
-          return {
-            entry,
-            status: match ? match.status : 'never_used',
-            statusInfo: match || null,
-          };
-        });
-        setDomainStatuses(merged);
-      }
-      return;
-    }
+    // 1. Fetch the accounts scoped to this domain (empty domain = the global
+    //    unscoped list). This is the authoritative entry list for the sidebar.
+    const entriesRes = await api.credentials.list(domain || undefined);
+    const entries: LoginEntry[] = (entriesRes.success && entriesRes.data) ? entriesRes.data : [];
 
-    const [statusRes, allRes] = await Promise.all([
-      api.status.getForDomain(domain),
-      api.status.getAll(),
-    ]);
+    // 2. Fetch the matching statuses. For a real domain we read the per-domain
+    //    bucket; with no domain we fall back to the global status set.
+    const statusRes = domain
+      ? await api.status.getForDomain(domain)
+      : await api.status.getAll();
 
-    // Build merged entries with current-domain status highlighted
-    const domainStatusMap = new Map<string, SiteLoginStatus>();
+    const statusMap = new Map<string, SiteLoginStatus>();
     if (statusRes.success && statusRes.data) {
-      for (const s of statusRes.data) {
-        domainStatusMap.set(s.loginEntryId, s);
-      }
+      for (const s of statusRes.data) statusMap.set(s.loginEntryId, s);
     }
 
-    const merged: EntryWithStatus[] = loginEntries.map(entry => {
-      const ds = domainStatusMap.get(entry.id) || null;
+    const merged: EntryWithStatus[] = entries.map(entry => {
+      const ds = statusMap.get(entry.id) || null;
       return {
         entry,
         status: ds ? ds.status : 'never_used',
         statusInfo: ds,
       };
     });
+
+    // 3. Commit both together so the sidebar never renders statuses against a
+    //    mismatched entry list.
+    setLoginEntries(entries);
     setDomainStatuses(merged);
-  }, [api, loginEntries]);
+  }, [api]);
 
   // Resolve the CANONICAL account domain for a URL (via the login-page
   // connection) and reload statuses under it. Use this after opening/switching
@@ -238,10 +237,6 @@ export default function App() {
     }
     loadDomainStatuses(domain);
   }, [api, loadDomainStatuses]);
-
-  const loadAllData = useCallback(async () => {
-    await Promise.all([loadLoginEntries(currentDomain), loadBookmarks()]);
-  }, [loadLoginEntries, loadBookmarks, currentDomain]);
 
   // The CANONICAL domain accounts/status/categories are keyed on. When the
   // current URL is a login page or a page connected to one, this is the
@@ -285,17 +280,16 @@ export default function App() {
   // Per-site accounts (#3): reload the login entries whenever the active
   // account domain changes so the sidebar shows this connection group's
   // accounts (login page + main site + related URLs share one list).
+  // When the active account domain changes, load its accounts + statuses
+  // together (loadDomainStatuses fetches the domain's account list itself and
+  // sets both loginEntries and domainStatuses atomically), plus its categories.
+  // Driving everything from the single `accountDomain` key — rather than
+  // chaining an entries-changed effect — removes the race that could leave the
+  // sidebar empty when returning to a tab after visiting an unrelated site.
   useEffect(() => {
-    loadLoginEntries(accountDomain);
+    loadDomainStatuses(accountDomain);
     loadCategories(accountDomain);
-  }, [accountDomain, loadLoginEntries, loadCategories]);
-
-  // Reload domain statuses when login entries or the account domain changes.
-  useEffect(() => {
-    if (loginEntries.length > 0) {
-      loadDomainStatuses(accountDomain);
-    }
-  }, [loginEntries, accountDomain, loadDomainStatuses]);
+  }, [accountDomain, loadDomainStatuses, loadCategories]);
 
   // ---- Webview management ----
 
@@ -490,9 +484,12 @@ export default function App() {
     if (tab?.currentUrl && tab.currentUrl !== 'about:blank') {
       reloadStatusesForUrl(tab.currentUrl);
     } else {
-      setDomainStatuses(loginEntries.map(e => ({ entry: e, status: 'never_used', statusInfo: null })));
+      // New/blank tab: show the global (unscoped) account list rather than
+      // mapping over a possibly-stale loginEntries closure. loadDomainStatuses
+      // fetches the list itself so the sidebar is always correct & consistent.
+      loadDomainStatuses(null);
     }
-  }, [tabs, api, reloadStatusesForUrl, loginEntries]);
+  }, [tabs, api, reloadStatusesForUrl, loadDomainStatuses]);
 
   const handleNavigate = useCallback(async (input: string) => {
     // Normalize raw address-bar input: bare domains get https://, and
@@ -629,10 +626,13 @@ export default function App() {
 
   const [modalData, setModalData] = useState({ label: '', usernameOrEmail: '', password: '' });
   const [modalError, setModalError] = useState<string | null>(null);
+  // Bug 4: show/hide the password in the Add Account modal.
+  const [showAddPassword, setShowAddPassword] = useState(false);
 
   const handleOpenAddEntryModal = useCallback(() => {
     setModalData({ label: '', usernameOrEmail: '', password: '' });
     setModalError(null);
+    setShowAddPassword(false);
     setShowAddEntryModal(true);
     // #1/#2: Detach the native BrowserView so the HTML modal is visible and
     // interactive on top of any loaded web page.
@@ -664,32 +664,50 @@ export default function App() {
     if (res.success) {
       setShowAddEntryModal(false);
       api.tabs.setOverlay(false);
-      loadLoginEntries(accountDomain);
+      // Reload entries + statuses together so the new account shows immediately.
+      loadDomainStatuses(accountDomain);
     } else {
       // #1: surface duplicate-account (and any other) errors in the modal.
       setModalError(res.error || 'Failed to save account.');
     }
-  }, [modalData, api, loadLoginEntries, accountDomain]);
+  }, [modalData, api, loadDomainStatuses, accountDomain]);
 
   // ---- Bookmark handler (#1: star button in the address bar) ----
 
   const isCurrentBookmarked = !!currentUrl && bookmarks.some(b => b.url === currentUrl);
 
+  // Star button (#3.2): if the page is already bookmarked, remove it; otherwise
+  // open the Save-bookmark modal so the user can pick a name and folder.
   const handleAddBookmark = useCallback(async () => {
     if (!currentUrl || currentUrl === 'about:blank') return;
-    // Toggle: if already bookmarked, remove it; otherwise add it.
     const existing = bookmarks.find(b => b.url === currentUrl);
     if (existing) {
       const res = await api.bookmarks.delete(existing.id);
       if (res.success) loadBookmarks();
       return;
     }
+    // Not yet bookmarked: fetch existing folders and open the modal.
+    const foldersRes = await api.bookmarks.folders();
+    const folders = (foldersRes.success && foldersRes.data) ? foldersRes.data : [];
+    setBookmarkModalFolders(folders);
+  }, [api, currentUrl, bookmarks, loadBookmarks]);
+
+  // Confirm handler for the Save-bookmark modal (#3.2).
+  const handleConfirmSaveBookmark = useCallback(async (draft: BookmarkDraft) => {
     const res = await api.bookmarks.create({
-      title: currentTitle && currentTitle !== 'Loading...' ? currentTitle : (currentDomain || currentUrl),
-      url: currentUrl,
+      title: draft.title,
+      url: draft.url,
+      folder: draft.folder,
     });
     if (res.success) loadBookmarks();
-  }, [api, currentUrl, currentTitle, currentDomain, bookmarks, loadBookmarks]);
+    setBookmarkModalFolders(null);
+  }, [api, loadBookmarks]);
+
+  // Remove a bookmark via the X button in the bookmarks bar (#3.1).
+  const handleRemoveBookmark = useCallback(async (bookmark: Bookmark) => {
+    const res = await api.bookmarks.delete(bookmark.id);
+    if (res.success) loadBookmarks();
+  }, [api, loadBookmarks]);
 
   // ---- Delete-account flow (#3: cross icon + confirm modal) ----
 
@@ -714,9 +732,10 @@ export default function App() {
     if (res.success) {
       setEntryToDelete(null);
       api.tabs.setOverlay(false);
-      loadLoginEntries(accountDomain);
+      // Reload entries + statuses together so the deleted account disappears.
+      loadDomainStatuses(accountDomain);
     }
-  }, [entryToDelete, api, loadLoginEntries, accountDomain]);
+  }, [entryToDelete, api, loadDomainStatuses, accountDomain]);
 
   // ---- Category handlers (Feature 3) ----
 
@@ -816,6 +835,7 @@ export default function App() {
         <BookmarksBar
           bookmarks={bookmarks}
           onNavigate={handleNavigate}
+          onRemove={handleRemoveBookmark}
         />
 
         {/* Tab strip */}
@@ -902,14 +922,25 @@ export default function App() {
 
             <div className="modal-field">
               <label className="modal-label">Password</label>
-              <input
-                className="modal-input"
-                type="password"
-                placeholder="Enter password"
-                value={modalData.password}
-                onChange={e => setModalData(prev => ({ ...prev, password: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && handleSaveNewEntry()}
-              />
+              <div className="password-input-wrap">
+                <input
+                  className="modal-input"
+                  type={showAddPassword ? 'text' : 'password'}
+                  placeholder="Enter password"
+                  value={modalData.password}
+                  onChange={e => setModalData(prev => ({ ...prev, password: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveNewEntry()}
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowAddPassword(v => !v)}
+                  aria-label={showAddPassword ? 'Hide password' : 'Show password'}
+                  title={showAddPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showAddPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
 
             <div className="modal-actions">
@@ -970,6 +1001,17 @@ export default function App() {
           categories={categories}
           onClose={handleCloseLoginPageModal}
           onSaved={(_msg) => { handleCloseLoginPageModal(); }}
+        />
+      )}
+
+      {/* Save-bookmark modal (#3.2) */}
+      {bookmarkModalFolders !== null && (
+        <SaveBookmarkModal
+          url={currentUrl}
+          defaultTitle={currentTitle && currentTitle !== 'Loading...' ? currentTitle : (currentDomain || currentUrl)}
+          folders={bookmarkModalFolders}
+          onCancel={() => setBookmarkModalFolders(null)}
+          onSave={handleConfirmSaveBookmark}
         />
       )}
 

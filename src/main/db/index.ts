@@ -59,6 +59,9 @@ export function initDatabase(): Database.Database {
   // (added so login/main/related pages share one canonical account key).
   migrateLoginPageMappingColumns(db);
 
+  // Migrate older databases that predate the bookmarks.folder column.
+  migrateAddBookmarkFolderColumn(db);
+
   console.log('[DB] Schema initialized successfully.');
 
   return db;
@@ -89,6 +92,23 @@ function migrateAddDomainColumn(database: Database.Database): void {
     }
   } catch (err) {
     console.error('[DB] domain-column migration failed:', err);
+  }
+}
+
+/**
+ * Ensure bookmarks has a `folder` column (added when bookmarks gained folder
+ * organization). Safe to run repeatedly.
+ */
+function migrateAddBookmarkFolderColumn(database: Database.Database): void {
+  try {
+    const cols = database.prepare(`PRAGMA table_info(bookmarks)`).all() as any[];
+    const hasFolder = cols.some(c => c.name === 'folder');
+    if (!hasFolder) {
+      console.log('[DB] Migrating: adding bookmarks.folder column');
+      database.exec(`ALTER TABLE bookmarks ADD COLUMN folder TEXT NOT NULL DEFAULT ''`);
+    }
+  } catch (err) {
+    console.error('[DB] bookmarks.folder migration failed:', err);
   }
 }
 

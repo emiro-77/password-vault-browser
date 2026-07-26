@@ -663,6 +663,35 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   active-tab status agrees with the number of tabs really open. New
   reconciliation unit tests in `tests/expiry-logic.test.ts`
   (stale-ignored / one-open-tab-single-active / no-live-tabs) (v1.1.8)
+- ✅ **Vault sidebar state, global-category UX, bookmark UX & password
+  visibility (v1.1.9)**: four related fixes.
+  (1) *Sidebar no longer blanks on new/unrelated tabs* — `loadDomainStatuses`
+  used to merge statuses over the `loginEntries` state closure, so several
+  async paths (effects, event handlers, tab switches) updated the entry list
+  and the status list independently and they raced out of sync — opening a new
+  tab on an unrelated/unsupported site could reset every account to "Never
+  Used" and blank the sidebar when returning to another tab. It is now
+  self-contained: it fetches the domain's own account list AND its statuses,
+  then commits `loginEntries` + `domainStatuses` together atomically. Each tab
+  preserves its own correct vault state; the dead `loadLoginEntries` /
+  `loadAllData` split was removed and a single `accountDomain`-driven effect
+  drives the reload.
+  (2) *Global category behaviour on empty sites* — a Global category correctly
+  stays visible on sites with no saved logins, but its empty state was
+  misleading. The sidebar now shows context-aware messaging that distinguishes
+  a Global category (accounts on other sites are still saved) from a Private
+  one, so an empty match no longer implies data loss.
+  (3) *Bookmark improvements* — (3.1) each saved bookmark now has an **X**
+  remove button in the bookmarks bar (hover to reveal) for one-click removal;
+  (3.2) clicking the **Star** now opens a **Save-bookmark modal** where you set
+  a custom name, choose an existing folder, create a new folder, and confirm
+  where it will be saved. New `folder` column on `bookmarks` (idempotent
+  migration), `listFolders()` service method + `BOOKMARKS_FOLDERS` IPC channel,
+  and folder-grouped display in the bookmarks bar.
+  (4) *Show/Hide password* — both the Add Account modal and the Edit Account
+  dialog (Settings › Site accounts) now have a 👁️ / 🙈 toggle that switches the
+  password field between hidden and plain text, working consistently in create
+  and edit states. (v1.1.9)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

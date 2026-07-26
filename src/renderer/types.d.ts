@@ -14,7 +14,8 @@ export interface PvbAPI {
 
   bookmarks: {
     list: () => Promise<IpcResponse<Bookmark[]>>;
-    create: (data: { title: string; url: string }) => Promise<IpcResponse<Bookmark>>;
+    create: (data: { title: string; url: string; folder?: string }) => Promise<IpcResponse<Bookmark>>;
+    folders: () => Promise<IpcResponse<string[]>>;
     delete: (id: string) => Promise<IpcResponse>;
     reorder: (orderedIds: string[]) => Promise<IpcResponse>;
   };

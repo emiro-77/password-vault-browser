@@ -390,6 +390,117 @@ html, body {
   font-size: 11px;
 }
 
+/* Bookmark item + X remove button wrapper (#3.1) */
+.bookmark-item-wrap {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.bookmark-item-wrap:hover {
+  background: var(--bg-hover);
+}
+
+.bookmark-item-wrap .bookmark-item {
+  padding-right: 2px;
+}
+
+.bookmark-remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 4px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  font-family: var(--font-family);
+}
+
+.bookmark-item-wrap:hover .bookmark-remove-btn {
+  opacity: 1;
+}
+
+.bookmark-remove-btn:hover {
+  background: var(--danger, #e5484d);
+  color: #fff;
+}
+
+/* Bookmark folders (#3.2) */
+.bookmark-folder {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.bookmark-folder-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  border: none;
+  font-family: var(--font-family);
+  transition: background 0.15s, color 0.15s;
+}
+
+.bookmark-folder-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.bookmark-folder-caret {
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+.bookmark-folder-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.bookmark-folder-menu .bookmark-item-wrap {
+  width: 100%;
+}
+
+.bookmark-folder-menu .bookmark-item {
+  flex: 1;
+}
+
+/* Save-bookmark modal placement confirmation hint (#3.2) */
+.bookmark-placement-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.bookmark-placement-hint strong {
+  color: var(--text-primary);
+}
+
 /* ---- Tab Strip ---- */
 
 .tab-strip {
@@ -843,6 +954,44 @@ html, body {
   border-color: var(--border-focus);
 }
 
+/* Password field with show/hide toggle (Bug 4) */
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrap .modal-input {
+  flex: 1;
+  padding-right: 38px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.75;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.password-toggle-btn:hover {
+  opacity: 1;
+  background: var(--bg-hover);
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -1081,6 +1230,13 @@ html, body {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
   text-align: center;
+}
+.sidebar-empty-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  opacity: 0.85;
 }
 
 /* ============================================================================

@@ -46,4 +46,14 @@ export function registerBookmarksIpc(): void {
       return { success: false, error: err.message };
     }
   });
+
+  // List distinct folder names (for the save-bookmark modal)
+  ipcMain.handle(IPC_CHANNELS.BOOKMARKS_FOLDERS, async (): Promise<IpcResponse> => {
+    try {
+      const folders = bookmarkManager.listFolders();
+      return { success: true, data: folders };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
 }

@@ -412,6 +412,7 @@ function AccountEditModal({ account, domain, onClose, onSaved }: AccountEditModa
   const [label, setLabel] = useState(account.label);
   const [username, setUsername] = useState(account.usernameOrEmail);
   const [password, setPassword] = useState(''); // blank = keep existing
+  const [showPassword, setShowPassword] = useState(false); // Bug 4: show/hide
   const [status, setStatus] = useState<LoginStatus>(account.status);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -489,14 +490,25 @@ function AccountEditModal({ account, domain, onClose, onSaved }: AccountEditModa
 
         <label className="modal-field">
           <span className="modal-field-label">Password</span>
-          <input
-            className="modal-input"
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder="Leave blank to keep the current password"
-            autoComplete="new-password"
-          />
+          <div className="password-input-wrap">
+            <input
+              className="modal-input"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Leave blank to keep the current password"
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              className="password-toggle-btn"
+              onClick={(e) => { e.preventDefault(); setShowPassword(v => !v); }}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              title={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? '🙈' : '👁️'}
+            </button>
+          </div>
         </label>
 
         <label className="modal-field">

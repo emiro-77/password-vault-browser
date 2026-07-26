@@ -226,20 +226,54 @@ export default function Sidebar({
       {/* Login entries */}
       <div className="sidebar-entries">
         {entries.length === 0 ? (
-          collapsed ? null : (
-            <div className="sidebar-empty">
-              <p>No saved logins {activeCategoryId ? 'in this category' : 'yet'}.</p>
-              <p style={{ marginTop: 8 }}>
-                <button
-                  className="modal-btn primary"
-                  onClick={onAddEntry}
-                  style={{ fontSize: 12, padding: '4px 12px' }}
-                >
-                  + Add Login
-                </button>
-              </p>
-            </div>
-          )
+          collapsed ? null : (() => {
+            // Context-aware empty state. When a category is selected we must not
+            // imply the category is broken or that data was lost — a GLOBAL
+            // category simply has no accounts saved for THIS site yet, while its
+            // accounts on other sites are untouched.
+            const activeCat = activeCategoryId
+              ? categories.find(c => c.id === activeCategoryId) || null
+              : null;
+            if (activeCat) {
+              const isGlobal = activeCat.scope !== 'private';
+              return (
+                <div className="sidebar-empty">
+                  <p>
+                    No accounts in <strong>{activeCat.name}</strong>{' '}
+                    for {currentDomain ? <strong>{currentDomain}</strong> : 'this site'}.
+                  </p>
+                  <p className="sidebar-empty-hint">
+                    {isGlobal
+                      ? 'This is a global category — its accounts on other sites are still saved. Add or assign an account here to see it on this site.'
+                      : 'This is a private category for this site. Add or assign an account to it.'}
+                  </p>
+                  <p style={{ marginTop: 8 }}>
+                    <button
+                      className="modal-btn primary"
+                      onClick={onAddEntry}
+                      style={{ fontSize: 12, padding: '4px 12px' }}
+                    >
+                      + Add Login
+                    </button>
+                  </p>
+                </div>
+              );
+            }
+            return (
+              <div className="sidebar-empty">
+                <p>No saved logins {currentDomain ? 'for this site' : 'yet'}.</p>
+                <p style={{ marginTop: 8 }}>
+                  <button
+                    className="modal-btn primary"
+                    onClick={onAddEntry}
+                    style={{ fontSize: 12, padding: '4px 12px' }}
+                  >
+                    + Add Login
+                  </button>
+                </p>
+              </div>
+            );
+          })()
         ) : collapsed ? (
           // ---- Minimized mode: only labels for accounts whose status is
           //      "never used" or "active tab" (the single active account).

@@ -25,8 +25,8 @@ const MOCK_LOGIN_ENTRIES: LoginEntry[] = [
 ];
 
 const MOCK_BOOKMARKS: Bookmark[] = [
-  { id: 'bm-1', title: 'Example', url: 'https://example.com', position: 0, createdAt: now() },
-  { id: 'bm-2', title: 'Search', url: 'https://duckduckgo.com', position: 1, createdAt: now() },
+  { id: 'bm-1', title: 'Example', url: 'https://example.com', folder: '', position: 0, createdAt: now() },
+  { id: 'bm-2', title: 'Search', url: 'https://duckduckgo.com', folder: 'Tools', position: 1, createdAt: now() },
 ];
 
 function ok<T>(data: T): Promise<IpcResponse<T>> {
@@ -71,7 +71,8 @@ function createMockApi(): PvbAPI & { __isMock: true } {
 
     bookmarks: {
       list: () => ok(MOCK_BOOKMARKS),
-      create: (data) => ok({ id: `bm-${Date.now()}`, title: data.title, url: data.url, position: 99, createdAt: now() }),
+      create: (data) => ok({ id: `bm-${Date.now()}`, title: data.title, url: data.url, folder: data.folder || '', position: 99, createdAt: now() }),
+      folders: () => ok(Array.from(new Set(MOCK_BOOKMARKS.map(b => b.folder).filter(f => f !== ''))).sort()),
       delete: () => ok(undefined),
       reorder: () => ok(undefined),
     },

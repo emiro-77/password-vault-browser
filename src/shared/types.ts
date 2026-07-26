@@ -238,6 +238,7 @@ export interface Bookmark {
   id: string;
   title: string;
   url: string;
+  folder: string;             // '' = top-level (no folder)
   position: number;
   createdAt: string;
 }
@@ -245,6 +246,7 @@ export interface Bookmark {
 export interface BookmarkCreateRequest {
   title: string;
   url: string;
+  folder?: string;            // optional folder name ('' / omitted = top-level)
 }
 
 // ---- Tab ----
@@ -287,6 +289,7 @@ export const IPC_CHANNELS = {
   BOOKMARKS_CREATE:       'bookmarks:create',
   BOOKMARKS_DELETE:       'bookmarks:delete',
   BOOKMARKS_REORDER:      'bookmarks:reorder',
+  BOOKMARKS_FOLDERS:      'bookmarks:folders',
 
   // Categories / folders
   CATEGORIES_LIST:        'categories:list',

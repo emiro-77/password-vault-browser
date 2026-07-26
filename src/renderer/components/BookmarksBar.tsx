@@ -2,15 +2,38 @@
 // Bookmarks Bar Component
 // ============================================================================
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Bookmark } from '../../shared/types';
 
 interface BookmarksBarProps {
   bookmarks: Bookmark[];
   onNavigate: (url: string) => void;
+  onRemove: (bookmark: Bookmark) => void;
 }
 
-export default function BookmarksBar({ bookmarks, onNavigate }: BookmarksBarProps) {
+export default function BookmarksBar({ bookmarks, onNavigate, onRemove }: BookmarksBarProps) {
+  // Which folder dropdown is currently open (by folder name).
+  const [openFolder, setOpenFolder] = useState<string | null>(null);
+
+  // Split bookmarks into top-level (no folder) and grouped-by-folder buckets.
+  const { topLevel, folders } = useMemo(() => {
+    const top: Bookmark[] = [];
+    const byFolder = new Map<string, Bookmark[]>();
+    for (const bm of bookmarks) {
+      const folder = bm.folder || '';
+      if (folder === '') {
+        top.push(bm);
+      } else {
+        if (!byFolder.has(folder)) byFolder.set(folder, []);
+        byFolder.get(folder)!.push(bm);
+      }
+    }
+    const folderList = Array.from(byFolder.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, items]) => ({ name, items }));
+    return { topLevel: top, folders: folderList };
+  }, [bookmarks]);
+
   if (bookmarks.length === 0) {
     return (
       <div className="bookmarks-bar">
@@ -21,20 +44,55 @@ export default function BookmarksBar({ bookmarks, onNavigate }: BookmarksBarProp
     );
   }
 
+  const renderBookmark = (bm: Bookmark) => (
+    <div key={bm.id} className="bookmark-item-wrap">
+      <button
+        className="bookmark-item"
+        onClick={() => onNavigate(bm.url)}
+        title={bm.url}
+      >
+        <span className="truncate" style={{ maxWidth: 160 }}>
+          {bm.title || bm.url}
+        </span>
+      </button>
+      <button
+        className="bookmark-remove-btn"
+        title="Remove bookmark"
+        aria-label={`Remove ${bm.title || bm.url}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove(bm);
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+
   return (
     <div className="bookmarks-bar">
-      {bookmarks.map(bm => (
-        <button
-          key={bm.id}
-          className="bookmark-item"
-          onClick={() => onNavigate(bm.url)}
-          title={bm.url}
-        >
-          <span className="truncate" style={{ maxWidth: 180 }}>
-            {bm.title || bm.url}
-          </span>
-        </button>
+      {/* Folder dropdowns first */}
+      {folders.map(folder => (
+        <div key={folder.name} className="bookmark-folder">
+          <button
+            className="bookmark-folder-btn"
+            onClick={() => setOpenFolder(openFolder === folder.name ? null : folder.name)}
+            title={folder.name}
+          >
+            <span className="bookmark-folder-icon">📁</span>
+            <span className="truncate" style={{ maxWidth: 120 }}>{folder.name}</span>
+            <span className="bookmark-folder-caret">{openFolder === folder.name ? '▴' : '▾'}</span>
+          </button>
+          {openFolder === folder.name && (
+            <div className="bookmark-folder-menu">
+              {folder.items.map(renderBookmark)}
+            </div>
+          )}
+        </div>
       ))}
+
+      {/* Top-level (unfoldered) bookmarks */}
+      {topLevel.map(renderBookmark)}
     </div>
   );
 }
