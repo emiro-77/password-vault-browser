@@ -123,6 +123,34 @@ CREATE TABLE IF NOT EXISTS site_rules (
   success_indicator_selector TEXT
 );
 
+-- Downloads history. One row per download (persisted across restarts).
+--   state: in_progress | paused | completed | cancelled | interrupted
+--   seen : 0 = not yet viewed in the downloads panel (drives the "unread" dot)
+CREATE TABLE IF NOT EXISTS downloads (
+  id             TEXT PRIMARY KEY,
+  url            TEXT NOT NULL,
+  filename       TEXT NOT NULL,
+  save_path      TEXT NOT NULL DEFAULT '',
+  mime           TEXT NOT NULL DEFAULT '',
+  total_bytes    INTEGER NOT NULL DEFAULT 0,
+  received_bytes INTEGER NOT NULL DEFAULT 0,
+  state          TEXT NOT NULL DEFAULT 'in_progress'
+                   CHECK (state IN ('in_progress','paused','completed','cancelled','interrupted')),
+  paused         INTEGER NOT NULL DEFAULT 0,
+  seen           INTEGER NOT NULL DEFAULT 0,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_downloads_created ON downloads(created_at);
+CREATE INDEX IF NOT EXISTS idx_downloads_state ON downloads(state);
+
+-- Simple key/value application settings (download dir, ask-each-time, etc.).
+CREATE TABLE IF NOT EXISTS app_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_site_login_status_entry ON site_login_status(login_entry_id);
 CREATE INDEX IF NOT EXISTS idx_site_login_status_domain ON site_login_status(domain);

@@ -18,6 +18,7 @@ import { initCredentialStore } from './services/credential-store';
 import { registerAllIpcHandlers } from './ipc';
 import { tabManager } from './services/tab-manager';
 import { sessionManager } from './services/session-manager';
+import { downloadManager } from './services/download-manager';
 import {
   DEFAULT_WINDOW_WIDTH,
   DEFAULT_WINDOW_HEIGHT,
@@ -141,6 +142,10 @@ async function initializeServices(): Promise<void> {
   //     starts from a clean slate and reflects only genuinely-open tabs.
   tabManager.purgeOrphanedPersistedTabs();
   tabManager.reconcileStatusActiveTabs();
+
+  // 4.6 Mark any downloads left mid-flight by a crash/kill as interrupted so
+  //     the UI doesn't show phantom "in progress" rows that can never finish.
+  downloadManager.reconcileOnBoot();
 
   // 5. Update view bounds whenever the renderer tells us chrome height
   ipcMain.on('browser:chrome-height', (_event: any, chromeHeight: number) => {

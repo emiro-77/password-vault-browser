@@ -760,6 +760,35 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   `dist/icon.png` runtime window/taskbar icon use it too. The portable and
   installable `.exe`, installer/uninstaller and the running window all now show
   the new logo. (v1.2.3)
+- ✅ **Download manager — Firefox-style (v1.3.0)**: a full download experience.
+  - **Capture**: every per-tab BrowserView session has a `will-download` hook
+    (`download-manager.ts`). By default files auto-save to the configured folder
+    with a unique name; when "always ask" is on a native Save-As dialog appears.
+  - **Toolbar entry point**: a download button in the top bar that is *hidden
+    until the first download exists*, then stays visible. It shows an animated
+    progress ring while downloading, changes colour for completed/unseen
+    downloads, and shows a small badge with the unseen count.
+  - **Floating panel** (`DownloadsPanel.tsx`): anchored to the toolbar button,
+    rendered above everything with a very high z-index (the BrowserView is
+    detached via `setOverlay` while it is open so it's clickable over the page).
+    Separate **Active** vs **Completed** groups; per-item name + progress/status;
+    actions: open file, pause/resume, cancel, retry, show-in-folder (completed
+    only), and a **clear separation between "remove from list" and "delete file
+    from disk"**. Keyboard navigation (↑/↓), close-on-Escape, click-outside to
+    close, and a footer button to open the full history. Opening the panel marks
+    all downloads as seen (clears the unread state).
+  - **History page** (`DownloadsHistoryPage.tsx`): full-screen list of all
+    downloads with search, status filtering (All/Active/Completed/Failed), size,
+    file path, timestamps, and open/reveal/retry/remove/delete actions.
+  - **Settings → Downloads**: default download folder (with an OS folder
+    picker), "always ask where to save", "keep download history", and a
+    clear-history action.
+  - **Persistence**: download history (`downloads` table) and settings
+    (`app_settings` table) survive restarts; in-progress downloads are marked
+    "interrupted" on boot (`reconcileOnBoot`).
+  - **IPC**: `downloads:*` channels + `event:download-updated` /
+    `event:downloads-changed`; retrying a failed download reopens its source URL
+    in a new tab, re-triggering the download. (v1.3.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

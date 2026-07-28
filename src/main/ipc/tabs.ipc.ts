@@ -6,6 +6,7 @@ import { ipcMain, BrowserWindow, BrowserView, Menu, MenuItemConstructorOptions, 
 import { IPC_CHANNELS, IpcResponse, PageInfo } from '../../shared/types';
 import { tabManager } from '../services/tab-manager';
 import { autofillEngine } from '../services/autofill-engine';
+import { downloadManager } from '../services/download-manager';
 import { statusManager } from '../services/status-manager';
 import { loginEntryManager } from '../services/login-entry-manager';
 import { loginPageManager } from '../services/login-page-manager';
@@ -282,6 +283,10 @@ function createViewForTab(tabId: string, partitionId: string): BrowserView {
   // A solid background avoids a white flash + an extra full-page repaint on
   // first paint, which makes navigations feel faster.
   view.setBackgroundColor('#ffffff');
+
+  // Capture downloads triggered from this tab's session (browser-style
+  // downloads: progress, pause/resume, history, open-in-folder, etc.).
+  downloadManager.attachToWebContents(view.webContents);
 
   return view;
 }

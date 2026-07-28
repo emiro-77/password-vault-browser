@@ -22,6 +22,8 @@ interface AddressBarProps {
   theme: Theme;
   onToggleTheme: () => void;
   onOpenSettings: () => void;
+  /** Optional download toolbar button, rendered just left of the theme toggle. */
+  downloadSlot?: React.ReactNode;
 }
 
 export default function AddressBar({
@@ -40,6 +42,7 @@ export default function AddressBar({
   theme,
   onToggleTheme,
   onOpenSettings,
+  downloadSlot,
 }: AddressBarProps) {
   const [inputValue, setInputValue] = useState(url);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +135,9 @@ export default function AddressBar({
       >
         🔑
       </button>
+
+      {/* Download toolbar button — hidden until downloads exist. */}
+      {downloadSlot}
 
       {/* Light / Night theme toggle */}
       <ThemeToggle theme={theme} onToggle={onToggleTheme} />

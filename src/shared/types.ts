@@ -275,6 +275,41 @@ export interface AutofillRequest {
   password: string;
 }
 
+// ---- Downloads ----
+
+export type DownloadState =
+  | 'in_progress'
+  | 'paused'
+  | 'completed'
+  | 'cancelled'
+  | 'interrupted';
+
+export interface DownloadItem {
+  id: string;
+  url: string;
+  filename: string;
+  savePath: string;
+  mime: string;
+  totalBytes: number;
+  receivedBytes: number;
+  state: DownloadState;
+  paused: boolean;
+  /** false while the download is still "unread" in the panel. */
+  seen: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Application settings for the Downloads feature (persisted key/value). */
+export interface DownloadSettings {
+  /** Default directory downloads are saved to. Empty = OS Downloads folder. */
+  downloadDir: string;
+  /** Ask where to save each file (show a Save-As dialog) instead of auto-save. */
+  askEachTime: boolean;
+  /** Keep a persistent history of finished downloads. */
+  keepHistory: boolean;
+}
+
 // ---- IPC Channel Names ----
 
 export const IPC_CHANNELS = {
@@ -344,6 +379,22 @@ export const IPC_CHANNELS = {
   SETTINGS_EXPORT_DATA:   'settings:export-data',
   SETTINGS_IMPORT_DATA:   'settings:import-data',
 
+  // Downloads
+  DOWNLOADS_LIST:         'downloads:list',
+  DOWNLOADS_PAUSE:        'downloads:pause',
+  DOWNLOADS_RESUME:       'downloads:resume',
+  DOWNLOADS_CANCEL:       'downloads:cancel',
+  DOWNLOADS_RETRY:        'downloads:retry',
+  DOWNLOADS_OPEN_FILE:    'downloads:open-file',
+  DOWNLOADS_SHOW_IN_FOLDER: 'downloads:show-in-folder',
+  DOWNLOADS_REMOVE:       'downloads:remove',        // remove from history only
+  DOWNLOADS_DELETE_FILE:  'downloads:delete-file',   // delete file from disk (+history)
+  DOWNLOADS_CLEAR:        'downloads:clear',         // clear finished history
+  DOWNLOADS_MARK_SEEN:    'downloads:mark-seen',
+  DOWNLOADS_GET_SETTINGS: 'downloads:get-settings',
+  DOWNLOADS_SET_SETTINGS: 'downloads:set-settings',
+  DOWNLOADS_CHOOSE_DIR:   'downloads:choose-dir',
+
   // Events (main -> renderer)
   EVENT_TAB_CREATED:      'event:tab-created',
   EVENT_TAB_CLOSED:       'event:tab-closed',
@@ -353,6 +404,8 @@ export const IPC_CHANNELS = {
   EVENT_NAVIGATION_STATE_CHANGED: 'event:nav-state-changed',
   EVENT_STATUS_CHANGED:   'event:status-changed',
   EVENT_LOAD_PROGRESS:    'event:load-progress',
+  EVENT_DOWNLOAD_UPDATED: 'event:download-updated',  // one download changed
+  EVENT_DOWNLOADS_CHANGED: 'event:downloads-changed', // list changed (add/remove)
 } as const;
 
 // ---- IPC Request / Response Types ----

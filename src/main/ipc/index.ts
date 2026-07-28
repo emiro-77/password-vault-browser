@@ -11,6 +11,7 @@ import { registerAutofillIpc } from './autofill.ipc';
 import { registerSiteRulesIpc } from './site-rules.ipc';
 import { registerSettingsIpc } from './settings.ipc';
 import { registerLoginPageIpc } from './login-page.ipc';
+import { registerDownloadsIpc } from './downloads.ipc';
 
 /**
  * Register all IPC handlers for the application.
@@ -28,6 +29,7 @@ export function registerAllIpcHandlers(): void {
   registerSiteRulesIpc();
   registerSettingsIpc();
   registerLoginPageIpc();
+  registerDownloadsIpc();
 
   console.log('[IPC] All IPC handlers registered.');
 }

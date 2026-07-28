@@ -224,6 +224,23 @@ function createMockApi(): PvbAPI & { __isMock: true } {
       }),
     },
 
+    downloads: {
+      list: () => ok([]),
+      pause: () => ok(undefined),
+      resume: () => ok(undefined),
+      cancel: () => ok(undefined),
+      retry: () => ok({ url: 'https://example.com/file.zip' }),
+      openFile: () => ok(undefined),
+      showInFolder: () => ok(undefined),
+      remove: () => ok(undefined),
+      deleteFile: () => ok(undefined),
+      clear: () => ok(undefined),
+      markSeen: () => ok(undefined),
+      getSettings: () => ok({ downloadDir: '/mock/Downloads', askEachTime: false, keepHistory: true }),
+      setSettings: (patch: any) => ok({ downloadDir: '/mock/Downloads', askEachTime: false, keepHistory: true, ...patch }),
+      chooseDir: () => ok({ downloadDir: '/mock/Downloads' }),
+    },
+
     sendChromeHeight: () => { /* no-op in mock mode */ },
     sendTheme: () => { /* no-op in mock mode */ },
     sendSidebarWidth: () => { /* no-op in mock mode */ },

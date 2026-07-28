@@ -2,7 +2,7 @@
 // Type declarations for the renderer's window.pvbAPI
 // ============================================================================
 
-import { IpcResponse, LoginEntry, Bookmark, SiteLoginStatus, TabInfo, Category, CategoryCreateRequest, CategoryUpdateRequest, SiteAccountsGroup, ClearDataRequest, ClearDataResult, SetAccountStatusRequest, ClearAccountTimerRequest, ExportDataRequest, ExportDataResult, ImportDataRequest, ImportDataResult, LoginPageMapping, SaveLoginPageRequest, UpdateLoginPageRequest, ResolvedLoginPage, LoginConnection } from '../shared/types';
+import { IpcResponse, LoginEntry, Bookmark, SiteLoginStatus, TabInfo, Category, CategoryCreateRequest, CategoryUpdateRequest, SiteAccountsGroup, ClearDataRequest, ClearDataResult, SetAccountStatusRequest, ClearAccountTimerRequest, ExportDataRequest, ExportDataResult, ImportDataRequest, ImportDataResult, LoginPageMapping, SaveLoginPageRequest, UpdateLoginPageRequest, ResolvedLoginPage, LoginConnection, DownloadItem, DownloadSettings } from '../shared/types';
 
 export interface PvbAPI {
   credentials: {
@@ -71,6 +71,23 @@ export interface PvbAPI {
     delete: (id: string) => Promise<IpcResponse<{ deleted: boolean }>>;
     resolve: (currentUrl: string, loginEntryId: string) => Promise<IpcResponse<ResolvedLoginPage | null>>;
     connection: (url: string) => Promise<IpcResponse<LoginConnection>>;
+  };
+
+  downloads: {
+    list: () => Promise<IpcResponse<DownloadItem[]>>;
+    pause: (id: string) => Promise<IpcResponse>;
+    resume: (id: string) => Promise<IpcResponse>;
+    cancel: (id: string) => Promise<IpcResponse>;
+    retry: (id: string) => Promise<IpcResponse<{ url: string }>>;
+    openFile: (id: string) => Promise<IpcResponse>;
+    showInFolder: (id: string) => Promise<IpcResponse>;
+    remove: (id: string) => Promise<IpcResponse>;
+    deleteFile: (id: string) => Promise<IpcResponse>;
+    clear: () => Promise<IpcResponse>;
+    markSeen: () => Promise<IpcResponse>;
+    getSettings: () => Promise<IpcResponse<DownloadSettings>>;
+    setSettings: (patch: Partial<DownloadSettings>) => Promise<IpcResponse<DownloadSettings>>;
+    chooseDir: () => Promise<IpcResponse<{ downloadDir: string }>>;
   };
 
   sendChromeHeight: (height: number) => void;

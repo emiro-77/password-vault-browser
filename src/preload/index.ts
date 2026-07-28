@@ -82,6 +82,22 @@ const IPC_CHANNELS = {
   SETTINGS_EXPORT_DATA:   'settings:export-data',
   SETTINGS_IMPORT_DATA:   'settings:import-data',
 
+  // Downloads
+  DOWNLOADS_LIST:         'downloads:list',
+  DOWNLOADS_PAUSE:        'downloads:pause',
+  DOWNLOADS_RESUME:       'downloads:resume',
+  DOWNLOADS_CANCEL:       'downloads:cancel',
+  DOWNLOADS_RETRY:        'downloads:retry',
+  DOWNLOADS_OPEN_FILE:    'downloads:open-file',
+  DOWNLOADS_SHOW_IN_FOLDER: 'downloads:show-in-folder',
+  DOWNLOADS_REMOVE:       'downloads:remove',
+  DOWNLOADS_DELETE_FILE:  'downloads:delete-file',
+  DOWNLOADS_CLEAR:        'downloads:clear',
+  DOWNLOADS_MARK_SEEN:    'downloads:mark-seen',
+  DOWNLOADS_GET_SETTINGS: 'downloads:get-settings',
+  DOWNLOADS_SET_SETTINGS: 'downloads:set-settings',
+  DOWNLOADS_CHOOSE_DIR:   'downloads:choose-dir',
+
   // Events (main -> renderer)
   EVENT_TAB_CREATED:      'event:tab-created',
   EVENT_TAB_CLOSED:       'event:tab-closed',
@@ -91,6 +107,8 @@ const IPC_CHANNELS = {
   EVENT_NAVIGATION_STATE_CHANGED: 'event:nav-state-changed',
   EVENT_STATUS_CHANGED:   'event:status-changed',
   EVENT_LOAD_PROGRESS:    'event:load-progress',
+  EVENT_DOWNLOAD_UPDATED: 'event:download-updated',
+  EVENT_DOWNLOADS_CHANGED: 'event:downloads-changed',
 } as const;
 
 // Define the API surface exposed to the renderer
@@ -193,6 +211,24 @@ const api = {
     importData: (req: any) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_IMPORT_DATA, req),
   },
 
+  // ---- Downloads ----
+  downloads: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_LIST),
+    pause: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_PAUSE, id),
+    resume: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_RESUME, id),
+    cancel: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_CANCEL, id),
+    retry: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_RETRY, id),
+    openFile: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_OPEN_FILE, id),
+    showInFolder: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_SHOW_IN_FOLDER, id),
+    remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_REMOVE, id),
+    deleteFile: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_DELETE_FILE, id),
+    clear: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_CLEAR),
+    markSeen: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_MARK_SEEN),
+    getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_GET_SETTINGS),
+    setSettings: (patch: any) => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_SET_SETTINGS, patch),
+    chooseDir: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOADS_CHOOSE_DIR),
+  },
+
   // ---- Event Listeners ----
   on: (channel: string, callback: (...args: any[]) => void) => {
     const validChannels = [
@@ -204,6 +240,8 @@ const api = {
       IPC_CHANNELS.EVENT_NAVIGATION_STATE_CHANGED,
       IPC_CHANNELS.EVENT_STATUS_CHANGED,
       IPC_CHANNELS.EVENT_LOAD_PROGRESS,
+      IPC_CHANNELS.EVENT_DOWNLOAD_UPDATED,
+      IPC_CHANNELS.EVENT_DOWNLOADS_CHANGED,
     ];
 
     if (validChannels.includes(channel as any)) {

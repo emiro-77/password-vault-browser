@@ -11,8 +11,11 @@ import CategoryModal from './components/CategoryModal';
 import SettingsPanel from './components/SettingsPanel';
 import SaveLoginPageModal from './components/SaveLoginPageModal';
 import SaveBookmarkModal, { BookmarkDraft } from './components/SaveBookmarkModal';
+import DownloadButton from './components/DownloadButton';
+import DownloadsPanel from './components/DownloadsPanel';
+import DownloadsHistoryPage from './components/DownloadsHistoryPage';
 import { Theme } from './components/ThemeToggle';
-import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus, Category, LoginConnection } from '../shared/types';
+import { LoginEntry, Bookmark, SiteLoginStatus, TabInfo, LoginStatus, Category, LoginConnection, DownloadItem } from '../shared/types';
 import { WebviewTag } from './types.d';
 import { getApi, isMockApi } from './api';
 import { normalizeUrlOrSearch, domainFromUrl } from '../shared/url-utils';
@@ -93,6 +96,16 @@ export default function App() {
 
   // Settings tab (opens above the browser view).
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Which settings section to open on mount (deep-link, e.g. from Downloads).
+  const [settingsSection, setSettingsSection] = useState<'accounts' | 'data' | 'downloads'>('accounts');
+
+  // ---- Downloads feature ----
+  const [downloads, setDownloads] = useState<DownloadItem[]>([]);
+  const [downloadsPanelOpen, setDownloadsPanelOpen] = useState(false);
+  const [downloadsHistoryOpen, setDownloadsHistoryOpen] = useState(false);
+  const downloadBtnRef = useRef<HTMLButtonElement>(null);
+  // Downloads not yet seen (unread) since the panel was last opened.
+  const unseenCount = downloads.filter(d => !d.seen).length;
 
   // Save-as-Login-Page modal (opens above the browser view).
   const [loginPageModalOpen, setLoginPageModalOpen] = useState(false);
@@ -119,7 +132,8 @@ export default function App() {
 
   // ---- Settings ----
 
-  const handleOpenSettings = useCallback(() => {
+  const handleOpenSettings = useCallback((sectionArg?: 'accounts' | 'data' | 'downloads') => {
+    setSettingsSection(sectionArg ?? 'accounts');
     setSettingsOpen(true);
     api.tabs.setOverlay(true);
   }, [api]);
@@ -128,6 +142,116 @@ export default function App() {
     setSettingsOpen(false);
     api.tabs.setOverlay(false);
   }, [api]);
+
+  // ---- Downloads handlers ----
+
+  const refreshDownloads = useCallback(async () => {
+    const res = await api.downloads.list();
+    if (res.success && res.data) setDownloads(res.data);
+  }, [api]);
+
+  // Load the download list once on mount so the toolbar button reflects any
+  // history persisted across restarts.
+  useEffect(() => { refreshDownloads(); }, [refreshDownloads]);
+
+  const handleToggleDownloadsPanel = useCallback(() => {
+    setDownloadsPanelOpen(prev => {
+      const next = !prev;
+      if (next) {
+        // Opening: detach the web view so the panel is visible/clickable over
+        // the page, and mark all downloads as seen (clears the unread state).
+        api.tabs.setOverlay(true);
+        api.downloads.markSeen().then(() => refreshDownloads());
+      } else {
+        // Closing: reattach the web view unless another overlay is still open.
+        if (!settingsOpen && !downloadsHistoryOpen) api.tabs.setOverlay(false);
+      }
+      return next;
+    });
+  }, [api, settingsOpen, downloadsHistoryOpen, refreshDownloads]);
+
+  const handleCloseDownloadsPanel = useCallback(() => {
+    setDownloadsPanelOpen(false);
+    if (!settingsOpen && !downloadsHistoryOpen) api.tabs.setOverlay(false);
+  }, [api, settingsOpen, downloadsHistoryOpen]);
+
+  const handleOpenDownloadsHistory = useCallback(() => {
+    setDownloadsPanelOpen(false);
+    setDownloadsHistoryOpen(true);
+    api.tabs.setOverlay(true);
+  }, [api]);
+
+  const handleCloseDownloadsHistory = useCallback(() => {
+    setDownloadsHistoryOpen(false);
+    if (!settingsOpen) api.tabs.setOverlay(false);
+  }, [api, settingsOpen]);
+
+  // Close the download history page on Escape.
+  useEffect(() => {
+    if (!downloadsHistoryOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); handleCloseDownloadsHistory(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [downloadsHistoryOpen, handleCloseDownloadsHistory]);
+
+  const handleDownloadPause = useCallback(async (id: string) => {
+    await api.downloads.pause(id);
+    refreshDownloads();
+  }, [api, refreshDownloads]);
+
+  const handleDownloadResume = useCallback(async (id: string) => {
+    await api.downloads.resume(id);
+    refreshDownloads();
+  }, [api, refreshDownloads]);
+
+  const handleDownloadCancel = useCallback(async (id: string) => {
+    await api.downloads.cancel(id);
+    refreshDownloads();
+  }, [api, refreshDownloads]);
+
+  const handleDownloadOpenFile = useCallback(async (id: string) => {
+    await api.downloads.openFile(id);
+  }, [api]);
+
+  const handleDownloadShowInFolder = useCallback(async (id: string) => {
+    await api.downloads.showInFolder(id);
+  }, [api]);
+
+  const handleDownloadRemove = useCallback(async (id: string) => {
+    await api.downloads.remove(id);
+    refreshDownloads();
+  }, [api, refreshDownloads]);
+
+  const handleDownloadDeleteFile = useCallback(async (id: string) => {
+    await api.downloads.deleteFile(id);
+    refreshDownloads();
+  }, [api, refreshDownloads]);
+
+  const handleDownloadClearFinished = useCallback(async () => {
+    await api.downloads.clear();
+    refreshDownloads();
+  }, [api, refreshDownloads]);
+
+  // Retry a failed download: reopen its source URL in a new tab (the page's
+  // download link fires again, re-triggering the download), per the requested
+  // "open the file link in a new tab and immediately start downloading" flow.
+  const handleDownloadRetry = useCallback(async (id: string) => {
+    const res = await api.downloads.retry(id);
+    if (res.success && res.data?.url) {
+      const url = res.data.url;
+      const created = await api.tabs.createGuest();
+      if (created.success && created.data) {
+        setTabs(prev => [...prev, created.data!]);
+        setActiveTabId(created.data.id);
+        await api.tabs.switch(created.data.id);
+        await api.tabs.navigate(url);
+        setCurrentUrl(url);
+      }
+    }
+    refreshDownloads();
+  }, [api, refreshDownloads]);
 
   // ---- Save current page as a login page ----
 
@@ -657,6 +781,28 @@ export default function App() {
       }
     });
 
+    // A single download changed (progress tick, state transition). Patch that
+    // one row in place so the progress bar/ring updates smoothly without a
+    // full re-fetch on every byte.
+    const unsubDlUpdated = api.on('event:download-updated', (data: any) => {
+      const item: DownloadItem | undefined = data?.item ?? data;
+      if (!item || !item.id) return;
+      setDownloads(prev => {
+        const idx = prev.findIndex(d => d.id === item.id);
+        if (idx === -1) return [item, ...prev];
+        const next = prev.slice();
+        next[idx] = item;
+        return next;
+      });
+    });
+
+    // The set of downloads changed (added/removed/cleared). Re-fetch the list.
+    const unsubDlChanged = api.on('event:downloads-changed', () => {
+      api.downloads.list().then(res => {
+        if (res.success && res.data) setDownloads(res.data);
+      });
+    });
+
     return () => {
       unsub1();
       unsubCreated();
@@ -664,6 +810,8 @@ export default function App() {
       unsub3();
       unsub4();
       unsub5();
+      unsubDlUpdated();
+      unsubDlChanged();
     };
   }, [api, activeTabId, currentDomain, loadDomainStatuses]);
 
@@ -941,7 +1089,16 @@ export default function App() {
           onSetLoginPage={handleOpenLoginPageModal}
           theme={theme}
           onToggleTheme={handleToggleTheme}
-          onOpenSettings={handleOpenSettings}
+          onOpenSettings={() => handleOpenSettings()}
+          downloadSlot={
+            <DownloadButton
+              ref={downloadBtnRef}
+              downloads={downloads}
+              unseenCount={unseenCount}
+              open={downloadsPanelOpen}
+              onClick={handleToggleDownloadsPanel}
+            />
+          }
         />
 
         {/* Bookmarks bar */}
@@ -1008,7 +1165,43 @@ export default function App() {
           window. The native web view is already detached via setOverlay. */}
       {settingsOpen && (
         <div className="settings-fullscreen">
-          <SettingsPanel onClose={handleCloseSettings} />
+          <SettingsPanel onClose={handleCloseSettings} initialSection={settingsSection} />
+        </div>
+      )}
+
+      {/* Floating downloads panel — anchored to the toolbar button, rendered
+          above all other UI with a very high z-index. The web view is already
+          detached via setOverlay while it is open. */}
+      {downloadsPanelOpen && (
+        <DownloadsPanel
+          downloads={downloads}
+          onClose={handleCloseDownloadsPanel}
+          onOpenHistory={handleOpenDownloadsHistory}
+          onPause={handleDownloadPause}
+          onResume={handleDownloadResume}
+          onCancel={handleDownloadCancel}
+          onRetry={handleDownloadRetry}
+          onOpenFile={handleDownloadOpenFile}
+          onShowInFolder={handleDownloadShowInFolder}
+          onRemove={handleDownloadRemove}
+          onDeleteFile={handleDownloadDeleteFile}
+          onClearFinished={handleDownloadClearFinished}
+        />
+      )}
+
+      {/* Full download history page — full-screen overlay above all chrome. */}
+      {downloadsHistoryOpen && (
+        <div className="settings-fullscreen">
+          <DownloadsHistoryPage
+            downloads={downloads}
+            onClose={handleCloseDownloadsHistory}
+            onOpenFile={handleDownloadOpenFile}
+            onShowInFolder={handleDownloadShowInFolder}
+            onRemove={handleDownloadRemove}
+            onDeleteFile={handleDownloadDeleteFile}
+            onRetry={handleDownloadRetry}
+            onClearFinished={handleDownloadClearFinished}
+          />
         </div>
       )}
 

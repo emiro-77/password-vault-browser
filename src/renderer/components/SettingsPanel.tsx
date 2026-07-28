@@ -10,14 +10,16 @@
 //   2. Data management — clear the browser's cache / cookies / site storage.
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { SiteAccountsGroup, SiteAccountInfo, LoginStatus, LoginPageMapping, Category } from '../../shared/types';
+import { SiteAccountsGroup, SiteAccountInfo, LoginStatus, LoginPageMapping, Category, DownloadSettings } from '../../shared/types';
 import { getApi } from '../api';
 
 interface SettingsPanelProps {
   onClose: () => void;
+  /** Open a specific section on mount (e.g. deep-link to Downloads). */
+  initialSection?: Section;
 }
 
-type Section = 'accounts' | 'data';
+type Section = 'accounts' | 'data' | 'downloads';
 
 const STATUS_LABEL: Record<LoginStatus, string> = {
   never_used: 'Never used',
@@ -47,9 +49,38 @@ function formatTimeRemaining(loggedInUntil: string | null): string | null {
   return '< 1m';
 }
 
-export default function SettingsPanel({ onClose }: SettingsPanelProps) {
+export default function SettingsPanel({ onClose, initialSection = 'accounts' }: SettingsPanelProps) {
   const api = getApi();
-  const [section, setSection] = useState<Section>('accounts');
+  const [section, setSection] = useState<Section>(initialSection);
+
+  // ---- Downloads settings ----
+  const [dlSettings, setDlSettings] = useState<DownloadSettings | null>(null);
+  const [dlClearResult, setDlClearResult] = useState<string | null>(null);
+
+  const loadDownloadSettings = useCallback(async () => {
+    const res = await api.downloads.getSettings();
+    if (res.success && res.data) setDlSettings(res.data);
+  }, [api]);
+
+  useEffect(() => { loadDownloadSettings(); }, [loadDownloadSettings]);
+
+  const patchDownloadSettings = useCallback(async (patch: Partial<DownloadSettings>) => {
+    const res = await api.downloads.setSettings(patch);
+    if (res.success && res.data) setDlSettings(res.data);
+  }, [api]);
+
+  const handleChooseDownloadDir = useCallback(async () => {
+    const res = await api.downloads.chooseDir();
+    if (res.success && res.data?.downloadDir) {
+      setDlSettings(prev => (prev ? { ...prev, downloadDir: res.data!.downloadDir } : prev));
+    }
+  }, [api]);
+
+  const handleClearDownloadHistory = useCallback(async () => {
+    setDlClearResult(null);
+    const res = await api.downloads.clear();
+    setDlClearResult(res.success ? 'Finished downloads cleared from history.' : 'Failed to clear history.');
+  }, [api]);
 
   // ---- Site accounts ----
   const [groups, setGroups] = useState<SiteAccountsGroup[]>([]);
@@ -198,6 +229,12 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             onClick={() => setSection('accounts')}
           >
             <span className="settings-nav-icon">🔑</span> Site accounts
+          </button>
+          <button
+            className={`settings-nav-item${section === 'downloads' ? ' active' : ''}`}
+            onClick={() => setSection('downloads')}
+          >
+            <span className="settings-nav-icon">⬇</span> Downloads
           </button>
           <button
             className={`settings-nav-item${section === 'data' ? ' active' : ''}`}
@@ -362,6 +399,71 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {section === 'downloads' && (
+            <div id="settings-downloads">
+              <h2 className="settings-section-title">Downloads</h2>
+              <p className="settings-section-desc">
+                Choose where files are saved and how download history is kept.
+              </p>
+
+              <div className="dl-settings">
+                <div className="dl-setting-row">
+                  <div className="dl-setting-label">
+                    <strong>Default download folder</strong>
+                    <span className="dl-setting-hint">Files are saved here unless you choose otherwise.</span>
+                  </div>
+                  <div className="dl-setting-control dl-dir-control">
+                    <input
+                      className="dl-dir-input"
+                      type="text"
+                      readOnly
+                      value={dlSettings?.downloadDir ?? ''}
+                      placeholder="System Downloads folder"
+                      title={dlSettings?.downloadDir ?? ''}
+                    />
+                    <button className="modal-btn" onClick={handleChooseDownloadDir}>Change…</button>
+                  </div>
+                </div>
+
+                <label className="dl-setting-row dl-setting-toggle">
+                  <div className="dl-setting-label">
+                    <strong>Always ask where to save files</strong>
+                    <span className="dl-setting-hint">Show a Save-As dialog for every download.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={!!dlSettings?.askEachTime}
+                    onChange={e => patchDownloadSettings({ askEachTime: e.target.checked })}
+                  />
+                </label>
+
+                <label className="dl-setting-row dl-setting-toggle">
+                  <div className="dl-setting-label">
+                    <strong>Keep download history</strong>
+                    <span className="dl-setting-hint">Remember finished downloads across restarts.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={!!dlSettings?.keepHistory}
+                    onChange={e => patchDownloadSettings({ keepHistory: e.target.checked })}
+                  />
+                </label>
+
+                <div className="dl-setting-row">
+                  <div className="dl-setting-label">
+                    <strong>Clear download history</strong>
+                    <span className="dl-setting-hint">Removes finished downloads from the list (files on disk are kept).</span>
+                  </div>
+                  <button className="modal-btn" onClick={handleClearDownloadHistory}>Clear history</button>
+                </div>
+
+                {dlClearResult && (
+                  <div className="clear-result" role="status">{dlClearResult}</div>
+                )}
+              </div>
             </div>
           )}
 
