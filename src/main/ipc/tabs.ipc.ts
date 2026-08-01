@@ -10,6 +10,7 @@ import { downloadManager } from '../services/download-manager';
 import { statusManager } from '../services/status-manager';
 import { loginEntryManager } from '../services/login-entry-manager';
 import { loginPageManager } from '../services/login-page-manager';
+import { bookmarkManager } from '../services/bookmark-manager';
 import { normalizeUrlOrSearch } from '../services/domain-utils';
 import { extractHostname, extractDomain } from '../services/domain-utils';
 import { canGoBack, canGoForward, goBack as wcGoBack, goForward as wcGoForward } from '../services/webcontents-utils';
@@ -18,6 +19,9 @@ import {
   mapHttpStatus,
   renderErrorPage,
   errorPageDataUrl,
+  renderCertErrorPage,
+  CERT_PROCEED_SENTINEL,
+  CERT_BACK_SENTINEL,
 } from '../services/error-page';
 import { AUTOFILL_PRELOAD } from '../../shared/constants';
 import { getDatabase } from '../db';
@@ -30,6 +34,22 @@ function broadcast(channel: string, data: any): void {
       win.webContents.send(channel, data);
     }
   }
+}
+
+// ---- Certificate-error bypass state (Issue 2) ----
+// Hosts the user consciously chose to "Proceed anyway" on. Kept in memory only
+// (cleared when the app quits) so a bypass never silently persists across runs.
+const certAllowlist = new Set<string>();
+// The URL that last hit a certificate error, per webContents id — used to
+// reload the original destination once the user proceeds.
+const pendingCertUrl = new Map<number, string>();
+// The Chromium cert-error string (e.g. net::ERR_CERT_AUTHORITY_INVALID) for the
+// pending cert error, per webContents id — used to explain the risk.
+const lastCertError = new Map<number, string>();
+
+/** Whether the given URL's host was allowlisted via the cert interstitial. */
+function isCertAllowed(url: string): boolean {
+  try { return certAllowlist.has(new URL(url).host); } catch { return false; }
 }
 
 /** Push refreshed per-site status for a domain to the renderer. */
@@ -298,6 +318,53 @@ function createViewForTab(tabId: string, partitionId: string): BrowserView {
 function setupViewEvents(tabId: string, view: BrowserView): void {
   const wc = view.webContents;
 
+  // ---- Certificate errors (Issue 2) ----
+  // Chromium fires this for untrusted TLS certs (e.g. ERR_CERT_AUTHORITY_INVALID).
+  // If the user already chose "Proceed anyway" for this host we accept the cert;
+  // otherwise we reject it and remember the URL so did-fail-load can show our
+  // "Your connection is not private" interstitial instead of the generic page.
+  wc.on('certificate-error', (event, url, certError, _certificate, callback) => {
+    if (isCertAllowed(url)) {
+      event.preventDefault();
+      callback(true);   // trust for this session
+      return;
+    }
+    pendingCertUrl.set(wc.id, url);
+    // Remember which cert-error string to explain on the interstitial.
+    lastCertError.set(wc.id, certError);
+    callback(false);    // reject -> load aborts -> did-fail-load fires
+  });
+
+  // Intercept the interstitial's action links (sentinel URLs) before they
+  // actually navigate.
+  wc.on('will-navigate', (event, targetUrl) => {
+    if (targetUrl === CERT_PROCEED_SENTINEL) {
+      event.preventDefault();
+      const original = pendingCertUrl.get(wc.id);
+      if (original) {
+        try { certAllowlist.add(new URL(original).host); } catch { /* ignore */ }
+        pendingCertUrl.delete(wc.id);
+        lastCertError.delete(wc.id);
+        if (!wc.isDestroyed()) wc.loadURL(original);
+      }
+      return;
+    }
+    if (targetUrl === CERT_BACK_SENTINEL) {
+      event.preventDefault();
+      pendingCertUrl.delete(wc.id);
+      lastCertError.delete(wc.id);
+      if (wc.isDestroyed()) return;
+      if (canGoBack(wc)) wcGoBack(wc);
+      else wc.loadURL('about:blank');
+      return;
+    }
+  });
+
+  wc.on('destroyed', () => {
+    pendingCertUrl.delete(wc.id);
+    lastCertError.delete(wc.id);
+  });
+
   const emitUrl = (url: string) => {
     broadcast(IPC_CHANNELS.EVENT_TAB_URL_CHANGED, {
       tabId,
@@ -383,6 +450,17 @@ function setupViewEvents(tabId: string, view: BrowserView): void {
     if ((validatedURL || '').startsWith('data:text/html')) return; // our error page
     if (wc.isDestroyed()) return;
 
+    // Certificate error (Issue 2): show the dedicated "Your connection is not
+    // private" interstitial (with a Proceed-anyway bypass) instead of the plain
+    // error page. Cert failures surface here as ERR_CERT_* codes (-200..-219).
+    const pending = pendingCertUrl.get(wc.id);
+    if (pending && errorCode <= -200 && errorCode >= -219) {
+      const certError = lastCertError.get(wc.id) || errorDescription || 'net::ERR_CERT_AUTHORITY_INVALID';
+      const html = renderCertErrorPage({ failedUrl: pending, certError });
+      wc.loadURL(errorPageDataUrl(html));
+      return;
+    }
+
     const info = describeNetError(errorCode, errorDescription);
     const html = renderErrorPage({
       title: info.title,
@@ -439,23 +517,46 @@ function setupViewEvents(tabId: string, view: BrowserView): void {
     const items: MenuItemConstructorOptions[] = [];
     const sep = () => { if (items.length && items[items.length - 1].type !== 'separator') items.push({ type: 'separator' }); };
 
-    // --- Link actions ---
+    // --- Link actions (Issue 1) ---
     if (params.linkURL) {
+      const linkURL = params.linkURL;
+      const linkText = (params.linkText || '').trim();
+
       items.push({
         label: 'Open Link in New Tab',
-        click: () => { openUrlInNewTab(params.linkURL); },
+        click: () => { openUrlInNewTab(linkURL); },
       });
       items.push({
         label: 'Open Link',
-        click: () => { if (!wc.isDestroyed()) wc.loadURL(params.linkURL); },
+        click: () => { if (!wc.isDestroyed()) wc.loadURL(linkURL); },
+      });
+      items.push({
+        label: 'Save URL',
+        click: () => {
+          try {
+            bookmarkManager.create({ title: linkText || linkURL, url: linkURL });
+            broadcast(IPC_CHANNELS.EVENT_BOOKMARKS_CHANGED, {});
+          } catch (err) {
+            console.error('[Tabs] Save URL (bookmark) failed:', err);
+          }
+        },
+      });
+      items.push({
+        label: 'Download Link',
+        click: () => { if (!wc.isDestroyed()) wc.downloadURL(linkURL); },
+      });
+      items.push({
+        label: 'Open in Browser',
+        click: () => { shell.openExternal(linkURL).catch(() => { /* ignore */ }); },
       });
       items.push({
         label: 'Copy Link Address',
-        click: () => { clipboard.writeText(params.linkURL); },
+        click: () => { clipboard.writeText(linkURL); },
       });
       items.push({
-        label: 'Open Link in Browser',
-        click: () => { shell.openExternal(params.linkURL).catch(() => { /* ignore */ }); },
+        label: 'Copy Link Text',
+        enabled: !!linkText,
+        click: () => { clipboard.writeText(linkText); },
       });
       sep();
     }

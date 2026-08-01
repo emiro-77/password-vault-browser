@@ -803,6 +803,12 @@ export default function App() {
       });
     });
 
+    // A bookmark was added elsewhere (e.g. "Save URL" from the page context
+    // menu). Re-fetch the bookmark list so the bar/panel stays in sync.
+    const unsubBookmarks = api.on('event:bookmarks-changed', () => {
+      loadBookmarks();
+    });
+
     return () => {
       unsub1();
       unsubCreated();
@@ -812,8 +818,9 @@ export default function App() {
       unsub5();
       unsubDlUpdated();
       unsubDlChanged();
+      unsubBookmarks();
     };
-  }, [api, activeTabId, currentDomain, loadDomainStatuses]);
+  }, [api, activeTabId, currentDomain, loadDomainStatuses, loadBookmarks]);
 
   // Reset the loading bar when switching tabs so a stale progress value from
   // the previous tab doesn't linger.

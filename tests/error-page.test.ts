@@ -7,6 +7,10 @@ import {
   mapHttpStatus,
   renderErrorPage,
   errorPageDataUrl,
+  describeCertError,
+  renderCertErrorPage,
+  CERT_PROCEED_SENTINEL,
+  CERT_BACK_SENTINEL,
 } from '../src/main/services/error-page';
 
 let failures = 0;
@@ -58,10 +62,38 @@ function test_dataUrl() {
   assert(url.includes('%3Chtml%3E'), 'content is URL-encoded');
 }
 
+function test_describeCertError() {
+  console.log('\n[error-page] describeCertError:');
+  assert(describeCertError('net::ERR_CERT_AUTHORITY_INVALID').label === 'ERR_CERT_AUTHORITY_INVALID', 'authority-invalid label');
+  assert(/authority|trust/i.test(describeCertError('net::ERR_CERT_AUTHORITY_INVALID').detail), 'authority-invalid explains trust');
+  assert(/expired|not yet valid|clock/i.test(describeCertError('net::ERR_CERT_DATE_INVALID').detail), 'date-invalid explains expiry');
+  assert(describeCertError('net::ERR_SOMETHING_NEW').detail.length > 0, 'unknown cert error -> generic detail');
+}
+
+function test_renderCertErrorPage() {
+  console.log('\n[error-page] renderCertErrorPage:');
+  const html = renderCertErrorPage({
+    failedUrl: 'https://self-signed.example.com/login?x=<script>alert(1)</script>',
+    certError: 'net::ERR_CERT_AUTHORITY_INVALID',
+  });
+  assert(html.includes('<!DOCTYPE html>'), 'is a full HTML document');
+  assert(/Your connection is not private/i.test(html), 'has the "not private" headline');
+  assert(html.includes('self-signed.example.com'), 'shows the host');
+  assert(html.includes('ERR_CERT_AUTHORITY_INVALID'), 'shows the error code');
+  assert(!html.includes('<script>alert(1)</script>'), 'URL script is not present unescaped');
+  assert(html.includes('Back to safety'), 'has Back to safety button');
+  assert(html.includes('Advanced'), 'has Advanced button');
+  assert(/Proceed to .*\(unsafe\)/i.test(html), 'has a Proceed (unsafe) option');
+  assert(html.includes(CERT_PROCEED_SENTINEL), 'Proceed links to the proceed sentinel');
+  assert(html.includes(CERT_BACK_SENTINEL), 'Back links to the back sentinel');
+}
+
 test_describeNetError();
 test_mapHttpStatus();
 test_renderErrorPage_escaping();
 test_dataUrl();
+test_describeCertError();
+test_renderCertErrorPage();
 
 if (failures > 0) { console.error(`\n[error-page] ${failures} assertion(s) failed`); process.exit(1); }
 else console.log('\n[error-page] all assertions passed');

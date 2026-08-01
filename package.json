@@ -1,6 +1,6 @@
 {
   "name": "vault-browser-desktop",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Privacy-focused multi-session browser with isolated tabs and global credential management",
   "main": "dist/main/index.js",
   "type": "commonjs",

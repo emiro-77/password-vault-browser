@@ -789,6 +789,28 @@ Behind a proxy, set `ELECTRON_MIRROR` or the proxy env vars before installing.
   - **IPC**: `downloads:*` channels + `event:download-updated` /
     `event:downloads-changed`; retrying a failed download reopens its source URL
     in a new tab, re-triggering the download. (v1.3.0)
+- ✅ **Richer link right-click menu (v1.4.0)**: the webpage context menu's link
+  section (built natively in `tabs.ipc.ts`, so no BrowserView detach/flash) now
+  offers the full set of link actions: **Open Link in New Tab**, **Open Link**
+  (current tab), **Save URL** (bookmarks the link's URL — title defaults to the
+  link text — and broadcasts the new `event:bookmarks-changed` so the bookmarks
+  bar refreshes live), **Download Link** (`webContents.downloadURL(linkURL)`,
+  captured by the v1.3.0 `will-download` hook), **Open in Browser**, **Copy Link
+  Address**, and **Copy Link Text** (disabled when the link has no text). (v1.4.0)
+- ✅ **"Your connection is not private" certificate interstitial (v1.4.0)**: when
+  a site presents an untrusted TLS certificate (e.g. `ERR_CERT_AUTHORITY_INVALID`,
+  `ERR_CERT_DATE_INVALID`), the tab shows a branded, Chrome-style interstitial
+  (`renderCertErrorPage` in `error-page.ts`) instead of the generic error page.
+  - **Back to safety** navigates back (or to `about:blank` if there's no history).
+  - **Advanced** expands a plain-language explanation of *why* the site is unsafe
+    (mapped per cert-error code via `describeCertError`).
+  - **Proceed to <host> (unsafe)** performs a conscious bypass: the button
+    navigates to an internal sentinel URL that the main process intercepts in
+    `will-navigate`, adds the host to an **in-memory per-session allowlist**, and
+    reloads the original URL. On reload the `certificate-error` handler sees the
+    allowlisted host and accepts the cert (`event.preventDefault(); callback(true)`).
+  - The allowlist lives only in memory, so a bypass **never persists across app
+    restarts**. (v1.4.0)
 - ✅ CI workflow running type-checks, build and unit tests
 - ⚠️ Remaining: exercise the full flow on a real Windows desktop (GUI can't run
   in CI/sandbox); optional migration from deprecated `BrowserView` to

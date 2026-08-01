@@ -109,6 +109,7 @@ const IPC_CHANNELS = {
   EVENT_LOAD_PROGRESS:    'event:load-progress',
   EVENT_DOWNLOAD_UPDATED: 'event:download-updated',
   EVENT_DOWNLOADS_CHANGED: 'event:downloads-changed',
+  EVENT_BOOKMARKS_CHANGED: 'event:bookmarks-changed',
 } as const;
 
 // Define the API surface exposed to the renderer
@@ -242,6 +243,7 @@ const api = {
       IPC_CHANNELS.EVENT_LOAD_PROGRESS,
       IPC_CHANNELS.EVENT_DOWNLOAD_UPDATED,
       IPC_CHANNELS.EVENT_DOWNLOADS_CHANGED,
+      IPC_CHANNELS.EVENT_BOOKMARKS_CHANGED,
     ];
 
     if (validChannels.includes(channel as any)) {

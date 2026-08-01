@@ -406,6 +406,7 @@ export const IPC_CHANNELS = {
   EVENT_LOAD_PROGRESS:    'event:load-progress',
   EVENT_DOWNLOAD_UPDATED: 'event:download-updated',  // one download changed
   EVENT_DOWNLOADS_CHANGED: 'event:downloads-changed', // list changed (add/remove)
+  EVENT_BOOKMARKS_CHANGED: 'event:bookmarks-changed', // bookmark added/removed elsewhere
 } as const;
 
 // ---- IPC Request / Response Types ----

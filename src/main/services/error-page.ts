@@ -213,3 +213,166 @@ export function renderErrorPage(opts: {
 export function errorPageDataUrl(html: string): string {
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
 }
+
+// ============================================================================
+// Certificate-error interstitial (Issue 2)
+// ============================================================================
+//
+// When a site presents an untrusted TLS certificate, Chromium fires
+// `certificate-error` and (by default) aborts the load. Instead of the plain
+// "did-fail-load" error page, we show a Chrome-style "Your connection is not
+// private" interstitial that explains the risk and — importantly — lets the
+// user consciously bypass it via a per-host allowlist handshake in the main
+// process.
+//
+// The three actions map to sentinel navigations the main process intercepts in
+// `will-navigate` (see tabs.ipc.ts):
+//   • Back to safety      -> history.back() (or home) — pure client side.
+//   • Advanced            -> toggles the explanation, pure client side.
+//   • Proceed (unsafe)    -> navigates to CERT_PROCEED_SENTINEL, which the main
+//                            process catches, allowlists the host, and reloads.
+
+/** Sentinel URL the "Proceed anyway" button navigates to; caught in main. */
+export const CERT_PROCEED_SENTINEL = 'https://pvb.invalid/__cert_proceed';
+/** Sentinel URL the "Back to safety" button navigates to; caught in main. */
+export const CERT_BACK_SENTINEL = 'https://pvb.invalid/__cert_back';
+
+/** Human-friendly explanation for a Chromium certificate error string. */
+export function describeCertError(certError: string): { label: string; detail: string } {
+  switch (certError) {
+    case 'net::ERR_CERT_AUTHORITY_INVALID':
+      return {
+        label: 'ERR_CERT_AUTHORITY_INVALID',
+        detail: 'The certificate is not signed by a recognized certificate authority. It may be self-signed, or issued by an authority your computer does not trust.',
+      };
+    case 'net::ERR_CERT_DATE_INVALID':
+      return {
+        label: 'ERR_CERT_DATE_INVALID',
+        detail: 'The certificate has expired or is not yet valid. This can also happen if your computer’s clock is set incorrectly.',
+      };
+    case 'net::ERR_CERT_COMMON_NAME_INVALID':
+      return {
+        label: 'ERR_CERT_COMMON_NAME_INVALID',
+        detail: 'The certificate does not match the address of this site, so it may belong to a different server.',
+      };
+    case 'net::ERR_CERT_REVOKED':
+      return {
+        label: 'ERR_CERT_REVOKED',
+        detail: 'The certificate has been revoked by its issuer and can no longer be trusted.',
+      };
+    default:
+      return {
+        label: certError || 'ERR_CERT_INVALID',
+        detail: 'The site’s security certificate could not be verified, so the connection is not private.',
+      };
+  }
+}
+
+/**
+ * Build the "Your connection is not private" interstitial as a self-contained
+ * HTML document (safe to load as a data: URL — no external assets, inline JS
+ * only toggles the Advanced panel and triggers sentinel navigations).
+ */
+export function renderCertErrorPage(opts: {
+  failedUrl: string;
+  certError: string;
+}): string {
+  const { failedUrl, certError } = opts;
+  const info = describeCertError(certError);
+  let host = failedUrl;
+  try { host = new URL(failedUrl).hostname; } catch { /* keep raw */ }
+  const safeUrl = esc(failedUrl);
+  const safeHost = esc(host);
+  const safeLabel = esc(info.label);
+  const safeDetail = esc(info.detail);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Your connection is not private</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #1e1e2e; color: #cdd6f4; padding: 24px;
+  }
+  .card {
+    max-width: 600px; width: 100%;
+    background: #181825; border: 1px solid #313244; border-radius: 14px;
+    padding: 40px 40px; text-align: left;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+  }
+  .icon { font-size: 52px; line-height: 1; margin-bottom: 18px; }
+  h1 { font-size: 24px; margin: 0 0 14px; color: #f5f5f7; font-weight: 650; }
+  p.message { font-size: 15px; margin: 0 0 12px; color: #bac2de; line-height: 1.5; }
+  .host { font-weight: 650; color: #f38ba8; }
+  .code {
+    display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; color: #f38ba8; background: #11111b;
+    border: 1px solid #313244; border-radius: 8px; padding: 6px 10px; margin: 6px 0 20px;
+  }
+  .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  button, a.btn {
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+    border: none; border-radius: 9px; padding: 11px 22px; transition: filter .15s ease;
+    text-decoration: none; display: inline-block;
+  }
+  button:hover, a.btn:hover { filter: brightness(1.1); }
+  .safety { background: #89b4fa; color: #11111b; }
+  .advanced { background: transparent; color: #89b4fa; padding: 11px 8px; }
+  #advPanel { display: none; margin-top: 22px; padding-top: 18px; border-top: 1px solid #313244; }
+  #advPanel p { font-size: 13px; color: #9399b2; line-height: 1.55; margin: 0 0 16px; }
+  .proceed {
+    background: transparent; color: #f38ba8; border: 1px solid #45354a;
+    font-size: 13px; padding: 9px 16px;
+  }
+  .url {
+    display: inline-block; max-width: 100%; overflow-wrap: anywhere;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; color: #89b4fa; margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+  <main class="card" role="alert">
+    <div class="icon" aria-hidden="true">🔒</div>
+    <h1>Your connection is not private</h1>
+    <p class="message">
+      Attackers might be trying to steal your information from
+      <span class="host">${safeHost}</span> (for example, passwords, messages,
+      or credit cards). The site’s security certificate is not trusted.
+    </p>
+    <div class="code">${safeLabel}</div>
+    <div class="actions">
+      <a class="btn safety" href="${esc(CERT_BACK_SENTINEL)}">Back to safety</a>
+      <button class="advanced" id="advToggle" type="button">Advanced</button>
+    </div>
+    <section id="advPanel">
+      <p>${safeDetail}</p>
+      <p>
+        This means the identity of <span class="host">${safeHost}</span> cannot
+        be verified, so any data you send could be intercepted. You should only
+        continue if you understand the risk and trust this site.
+      </p>
+      <a class="btn proceed" href="${esc(CERT_PROCEED_SENTINEL)}">Proceed to ${safeHost} (unsafe)</a>
+      <div class="url" title="${safeUrl}">${safeUrl}</div>
+    </section>
+  </main>
+  <script>
+    (function () {
+      var t = document.getElementById('advToggle');
+      var p = document.getElementById('advPanel');
+      t.addEventListener('click', function () {
+        var open = p.style.display === 'block';
+        p.style.display = open ? 'none' : 'block';
+        t.textContent = open ? 'Advanced' : 'Hide details';
+      });
+    })();
+  </script>
+</body>
+</html>`;
+}
