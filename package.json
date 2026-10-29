@@ -20,14 +20,13 @@
     "dist:linux": "npm run build && npx electron-builder --linux",
     "dist:deb": "npm run build && npx electron-builder --linux deb"
   },
-  "build": {
+    "build": {
     "appId": "com.passwordvault.browser",
     "productName": "Vault Browser Desktop",
     "directories": {
       "output": "release",
       "buildResources": "build"
     },
-    "icon": "build/icon.ico",
     "files": [
       "dist/**/*",
       "package.json"
@@ -42,11 +41,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico"
@@ -68,16 +71,6 @@
       ],
       "category": "Network;WebBrowser;",
       "icon": "build/icon.png"
-    },
-    "deb": {
-      "priority": "optional",
-      "depends": [
-        "libnotify4",
-        "libxtst6",
-        "libnss3",
-        "libasound2",
-        "libsecret-1-0"
-      ]
     },
     "nsis": {
       "oneClick": false,

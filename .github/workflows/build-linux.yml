@@ -20,7 +20,7 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt update
-          sudo apt install -y build-essential python3 libsecret-1-dev
+          sudo apt install -y build-essential python3 libsecret-1-dev fakeroot dpkg libfuse2
 
       - name: Install dependencies
         run: npm install
@@ -34,6 +34,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Password-Vault-Browser-Linux
           path: |
