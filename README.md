@@ -27,9 +27,11 @@ site (domain), and per-site login *status* is tracked for each site.
 
 ```bash
 npm install
-npm run build      # builds main, preload, and the bundled renderer
-npm start          # launch Electron
-npm run dist:portable   # build the Windows portable .exe
+npm run build          # builds main, preload, and the bundled renderer
+npm start              # launch Electron
+npm run dist:portable  # build the Windows portable .exe
+npm run dist:deb       # build the Linux .deb package
+npm run dist:linux     # build both .deb and .AppImage for Linux
 ```
 
 ### Renderer build note (important)

@@ -16,7 +16,9 @@
     "clean": "rm -rf dist/",
     "pack": "npm run build && npx electron-builder --dir",
     "dist": "npm run build && npx electron-builder",
-    "dist:portable": "npm run build && npx electron-builder --win portable"
+    "dist:portable": "npm run build && npx electron-builder --win portable",
+    "dist:linux": "npm run build && npx electron-builder --linux",
+    "dist:deb": "npm run build && npx electron-builder --linux deb"
   },
   "build": {
     "appId": "com.passwordvault.browser",
@@ -48,6 +50,34 @@
         }
       ],
       "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Network;WebBrowser;",
+      "icon": "build/icon.png"
+    },
+    "deb": {
+      "priority": "optional",
+      "depends": [
+        "libnotify4",
+        "libxtst6",
+        "libnss3",
+        "libasound2",
+        "libsecret-1-0"
+      ]
     },
     "nsis": {
       "oneClick": false,

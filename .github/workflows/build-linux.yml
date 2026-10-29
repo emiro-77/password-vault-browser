@@ -1,0 +1,41 @@
+name: Build Linux .deb
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential python3 libsecret-1-dev
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Package with electron-builder (.deb and AppImage)
+        run: npx electron-builder --linux deb AppImage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Password-Vault-Browser-Linux
+          path: |
+            release/*.deb
+            release/*.AppImage
