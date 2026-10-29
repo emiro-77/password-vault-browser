@@ -34,6 +34,49 @@ npm run dist:deb       # build the Linux .deb package
 npm run dist:linux     # build both .deb and .AppImage for Linux
 ```
 
+### Linux (.deb) — building and installing on Ubuntu
+
+The `.deb` is a standard Debian package and installs on Ubuntu 22.04+ / Debian 12+.
+
+Build it on a Linux machine (cross-building a `.deb` from Windows is not supported):
+
+```bash
+npm install
+npm run dist:deb                     # -> release/vault-browser-desktop_<version>_amd64.deb
+```
+
+Install and run:
+
+```bash
+sudo apt install ./release/vault-browser-desktop_1.4.0_amd64.deb
+vault-browser-desktop                # or launch "Vault Browser Desktop" from the app grid
+```
+
+Use `apt` (not `dpkg -i`) so the GTK/AT-SPI/secret-service dependencies are
+pulled in automatically. To remove it:
+
+```bash
+sudo apt remove vault-browser-desktop
+```
+
+What the package installs:
+
+| Path | Purpose |
+| --- | --- |
+| `/opt/Vault Browser Desktop/` | application files (Electron + `app.asar`) |
+| `/usr/bin/vault-browser-desktop` | launcher on `PATH` |
+| `/usr/share/applications/vault-browser-desktop.desktop` | desktop entry / app-grid icon |
+| `/usr/share/icons/hicolor/1024x1024/apps/vault-browser-desktop.png` | app icon |
+
+Note: the `.deb` `Depends` list uses the unversioned library names
+(`libgtk-3-0`, `libatspi2.0-0`, `libsecret-1-0`, `libasound2`, …). On
+Debian 13 / Ubuntu 24.04+ these are shipped as `t64`-suffixed packages that
+declare `Provides:` for the old names, so one package works on both.
+
+The GitHub Actions workflow `.github/workflows/build-linux.yml` builds these
+artifacts on every push to `main` and uploads them as the
+`Password-Vault-Browser-Linux` artifact.
+
 ### Renderer build note (important)
 
 The renderer is React/TSX and **must be bundled** into a single

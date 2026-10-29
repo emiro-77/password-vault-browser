@@ -4,6 +4,13 @@
   "description": "Privacy-focused multi-session browser with isolated tabs and global credential management",
   "main": "dist/main/index.js",
   "type": "commonjs",
+  "author": {
+    "name": "Emad Rostamian",
+    "email": "emira.rostamian@outlook.com"
+  },
+  "homepage": "https://github.com/emiro-77/password-vault-browser",
+  "license": "MIT",
+  "desktopName": "vault-browser-desktop.desktop",
   "scripts": {
     "build": "npm run build:main && npm run build:preload && npm run build:renderer && npm run copy-assets",
     "build:main": "tsc -p tsconfig.main.json",
@@ -20,7 +27,7 @@
     "dist:linux": "npm run build && npx electron-builder --linux",
     "dist:deb": "npm run build && npx electron-builder --linux deb"
   },
-    "build": {
+  "build": {
     "appId": "com.passwordvault.browser",
     "productName": "Vault Browser Desktop",
     "directories": {
@@ -70,7 +77,33 @@
         }
       ],
       "category": "Network;WebBrowser;",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "executableName": "vault-browser-desktop",
+      "synopsis": "Privacy-focused multi-session browser with a password vault",
+      "maintainer": "Emad Rostamian <emira.rostamian@outlook.com>",
+      "syncDesktopName": true,
+      "desktop": {
+        "entry": {
+          "Name": "Vault Browser Desktop",
+          "Comment": "Privacy-focused multi-session browser with a password vault",
+          "Keywords": "browser;vault;passwords;privacy;"
+        }
+      }
+    },
+    "deb": {
+      "priority": "optional",
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "libasound2"
+      ]
     },
     "nsis": {
       "oneClick": false,
